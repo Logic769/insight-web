@@ -287,6 +287,38 @@ describe('AdminView Tab 状态隔离', () => {
     expect(wrapper.text()).not.toContain('late-user')
   })
 
+  it('账号列表按 10 条分页，下一页请求 offset=10', async () => {
+    const users = Array.from({ length: 10 }, (_, index) => ({
+      id: index + 1,
+      username: `u${index + 1}`,
+      display_name: '',
+      department: '',
+      role: 'user' as const,
+      status: 'active' as const,
+      last_login_at: null,
+      created_at: '',
+    }))
+    adminApi.listAdminUsers
+      .mockResolvedValueOnce({ items: users, total: 25 })
+      .mockResolvedValueOnce({ items: users.slice(0, 5), total: 25 })
+    const wrapper = await mountAdmin()
+
+    await clickTab(wrapper, 2)
+    expect(adminApi.listAdminUsers).toHaveBeenLastCalledWith(
+      expect.objectContaining({ limit: 10, offset: 0 }),
+    )
+    expect(wrapper.text()).toContain('第 1 / 3 页 · 共 25 个账号')
+
+    const next = wrapper.findAll('button').find((button) => button.text() === '下一页')
+    expect(next).toBeTruthy()
+    await next!.trigger('click')
+    await flushPromises()
+    expect(adminApi.listAdminUsers).toHaveBeenLastCalledWith(
+      expect.objectContaining({ limit: 10, offset: 10 }),
+    )
+    expect(wrapper.text()).toContain('第 2 / 3 页 · 共 25 个账号')
+  })
+
   it('日志列表的迟到响应不覆盖后发请求的结果', async () => {
     const pending = deferred<{ items: unknown[]; total: number }>()
     adminApi.listOperationLogs

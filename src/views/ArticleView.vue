@@ -14,6 +14,10 @@
  * 前端只渲染该字段；缺失时用 MarkdownIt（html:false）把纯文本转义后渲染。
  * 目录由渲染后的 h2/h3 动态提取，不依赖服务端注入 id。
  *
+ * 相关度：详情接口返回文章级语义相关度 relevance_score（0-1）与 relevance_reason
+ * （AI 摘要句），头部展示相关度徽标；高相关（≥80 分）时展示「AI 要素摘要」，
+ * 关键信息卡保持原有逻辑（有抽取结果就展示），不随相关度隐藏。
+ *
  * 规范缺口（后端暂未提供对应能力，界面按「能取到的就展示、取不到就明说」处理）：
  * - 浏览量：接口没有，不展示。
  * - 「相关推荐 3-5 条」：调 /v1/articles?category=X 排除自身取 5 条同分类最新公告，
@@ -39,6 +43,7 @@ import { listTags, tagName, type TagDef } from '@/api/tags'
 import { categoryName } from '@/constants/categories'
 import { sourceName } from '@/constants/sources'
 import { formatDateTime, formatNumber, scoreToPercent } from '@/utils/format'
+import { highRelevanceSummary } from '@/utils/relevance'
 
 const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
 
@@ -72,6 +77,11 @@ const toc = ref<{ id: string; text: string; level: number }[]>([])
 let loadRequestId = 0
 /** 清单请求序号：生成成功会作废更早的 GET，切换文章也会作废在途的生成请求 */
 let checklistRequestId = 0
+
+/** AI 要素摘要：仅高相关且理由非空白时展示，空字符串不会被渲染成空卡片 */
+const relevanceSummary = computed(() =>
+  highRelevanceSummary(article.value?.relevance_score, article.value?.relevance_reason),
+)
 
 /** 优先渲染后端清洗过的 body_html；缺失时把纯文本按 Markdown（禁 HTML）转义渲染 */
 const bodyHtml = computed(() => {
@@ -382,6 +392,7 @@ watch(
           <span
             >约 <span class="num">{{ formatNumber(article.content_length) }}</span> 字</span
           >
+          <ScoreBadge :score="article.relevance_score ?? null" label="相关度" />
           <ScoreBadge :score="article.category_confidence" label="分类置信度" />
         </div>
         <div class="head__actions">
@@ -410,6 +421,12 @@ watch(
         </div>
         <p v-if="favoriteError" class="card__error" role="alert">{{ favoriteError }}</p>
       </header>
+
+      <section v-if="relevanceSummary" class="card relevance">
+        <h2 class="card__title">AI 要素摘要</h2>
+        <p class="relevance__text">{{ relevanceSummary }}</p>
+        <p class="card__note">由模型根据正文生成，仅高相关公告展示，请以原文为准。</p>
+      </section>
 
       <section v-if="fields.length" class="card">
         <h2 class="card__title">关键信息</h2>
@@ -535,7 +552,8 @@ watch(
             :source="item.source"
             :published-at="item.published_at"
             :category="item.category"
-            :score="null"
+            :score="item.relevance_score ?? null"
+            :summary="highRelevanceSummary(item.relevance_score, item.relevance_reason)"
             :show-more="false"
           />
         </div>
@@ -717,6 +735,16 @@ watch(
   margin: var(--space-3) 0 0;
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
+}
+
+.relevance__text {
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--color-success);
+  background: var(--color-success-bg);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-base);
 }
 
 .card__error {

@@ -38,6 +38,17 @@ async function mountHome() {
   return wrapper
 }
 
+/** 本地时区的 YYYY-MM-DD，offset 为相对今天的天数 */
+function localDay(offset: number): string {
+  const date = new Date()
+  date.setDate(date.getDate() + offset)
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-')
+}
+
 const article = {
   article_id: 'a1',
   source: 'ctp_kjb',
@@ -57,6 +68,8 @@ const article = {
   analyzed_at: '2026-11-14 10:00:00',
   body: null,
   tags: [],
+  relevance_score: 0.86,
+  relevance_reason: '含申报截止时间与资助额度，信息具体可行动。',
 }
 
 beforeEach(() => {
@@ -79,15 +92,17 @@ beforeEach(() => {
         ...article,
         article_id: 'rec1',
         title: '推荐公告一',
-        relevance: 0.92,
-        relevance_reason: '匹配关注行业',
+        relevance: 0.61,
+        profile_reason: '匹配关注行业',
+        relevance_score: 0.92,
       },
       {
         ...article,
         article_id: 'rec2',
         title: '推荐公告二',
-        relevance: 0.71,
-        relevance_reason: '内容质量综合评分',
+        relevance: 0.98,
+        profile_reason: '内容质量综合评分',
+        relevance_score: 0.71,
       },
     ],
     personalized: true,
@@ -124,12 +139,42 @@ beforeEach(() => {
 })
 
 describe('HomeView 推荐与待办', () => {
-  it('推荐使用后端 relevance，不再按分类置信度自算', async () => {
+  it('推荐使用文章级 relevance_score，不再按分类置信度或画像综合分自算', async () => {
     const wrapper = await mountHome()
     expect(vi.mocked(listRecommendations)).toHaveBeenCalledWith(10)
     expect(wrapper.text()).toContain('按你的关注领域、收藏与浏览记录排序')
     const scores = wrapper.findAll('.rec__meta .score__value').map((node) => node.text())
     expect(scores).toEqual(['92', '71'])
+  })
+
+  it('本周高相关卡按文章级 relevance_score 统计近 7 天', async () => {
+    vi.mocked(listArticles).mockResolvedValue({
+      items: [
+        { ...article, article_id: 'today-high', published_at: localDay(0) + ' 09:00:00' },
+        {
+          ...article,
+          article_id: 'old-high',
+          published_at: localDay(-10) + ' 09:00:00',
+          relevance_score: 0.99,
+        },
+        {
+          ...article,
+          article_id: 'yesterday-low',
+          published_at: localDay(-1) + ' 09:00:00',
+          relevance_score: 0.5,
+        },
+      ],
+      total: 3,
+      limit: 100,
+      offset: 0,
+      sort: 'published_desc',
+      undatedExcluded: 0,
+    })
+    const wrapper = await mountHome()
+    const cards = wrapper.findAll('.cards__item')
+    expect(cards[1].text()).toContain('近 7 天高相关度公告')
+    expect(cards[1].find('.cards__value').text()).toContain('1')
+    expect(cards[1].text()).toContain('文章相关度 ≥80 分（最新 100 篇、近 7 天）')
   })
 
   it('待办卡显示后端总数，明细只展示 Top5，链接指向项目申报分类', async () => {

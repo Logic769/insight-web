@@ -25,6 +25,7 @@ describe('searchArticles', () => {
     expect(url.searchParams.get('per_category')).toBe('100')
     expect(url.searchParams.get('include_body')).toBe('false')
     expect(url.searchParams.has('sort')).toBe(false)
+    expect(url.searchParams.has('min_relevance')).toBe(false)
     expect(url.searchParams.has('published_from')).toBe(false)
     expect(url.searchParams.getAll('source')).toEqual([])
     expect(url.searchParams.getAll('industry')).toEqual([])
@@ -39,12 +40,14 @@ describe('searchArticles', () => {
       sort: 'published_desc',
       categories: ['project_application'],
       industries: ['next_gen_it'],
+      minRelevance: 0.8,
     })
     const url = new URL(lastUrl(spy as never), 'http://localhost')
     expect(url.searchParams.getAll('source')).toEqual(['ctp_kjb', 'shpolicy_ssme'])
     expect(url.searchParams.get('published_from')).toBe('2026-09-01')
     expect(url.searchParams.get('published_to')).toBe('2026-10-31')
     expect(url.searchParams.get('sort')).toBe('published_desc')
+    expect(url.searchParams.get('min_relevance')).toBe('0.8')
     expect(url.searchParams.getAll('category')).toEqual(['project_application'])
     expect(url.searchParams.getAll('industry')).toEqual(['next_gen_it'])
   })
@@ -90,7 +93,7 @@ describe('listArticles', () => {
         total: 143,
         limit: 50,
         offset: 50,
-        sort: 'published_asc',
+        sort: 'relevance_score_desc',
         undated_excluded: 2,
       },
     })
@@ -100,7 +103,8 @@ describe('listArticles', () => {
       industry: 'new_materials',
       publishedFrom: '2026-08-01',
       publishedTo: '2026-11-30',
-      sort: 'published_asc',
+      sort: 'relevance_score_desc',
+      minRelevance: 0.8,
       limit: 50,
       offset: 50,
     })
@@ -110,9 +114,10 @@ describe('listArticles', () => {
     expect(url.searchParams.get('industry')).toBe('new_materials')
     expect(url.searchParams.get('published_from')).toBe('2026-08-01')
     expect(url.searchParams.get('published_to')).toBe('2026-11-30')
-    expect(url.searchParams.get('sort')).toBe('published_asc')
+    expect(url.searchParams.get('sort')).toBe('relevance_score_desc')
+    expect(url.searchParams.get('min_relevance')).toBe('0.8')
     expect(page.total).toBe(143)
     expect(page.undatedExcluded).toBe(2)
-    expect(page.sort).toBe('published_asc')
+    expect(page.sort).toBe('relevance_score_desc')
   })
 })

@@ -3,15 +3,15 @@
  * 首页。
  * 对照规范 2.2.1（二）模块二：
  * （1）顶部导航：Logo / 当前时间 / 头像下拉 —— 见 components/AppNav.vue
- * （2）3 个数据概览卡片：今日新增公告数、本周高相关度公告、待办申报事项，每 5 分钟自动刷新
+ * （2）3 个数据概览卡片：今日新增公告数、近 7 天高相关度公告、待办申报事项，每 5 分钟自动刷新
  * （3）快捷入口：分类浏览、关键词检索、申报清单生成、个人中心
  * （4）Top10 个性化推荐：登录按关注领域/收藏/浏览记录画像，匿名按内容质量与新鲜度
  * （5）消息通知铃铛 —— 见 components/AppNav.vue
  * （6）侧边栏折叠/展开 —— 见 components/AppNav.vue
  * （7）全局搜索框 —— 见 components/AppNav.vue
  *
- * 数据来源说明：后台没有全库时间范围统计接口，"今日新增"与"高置信度"仍取最新
- * 100 篇在本地统计（卡片 hint 已注明口径）；待办与推荐分别来自 GET /v1/todos
+ * 数据来源说明：后台没有全库时间范围统计接口，"今日新增"与"近 7 天高相关度"仍取
+ * 最新 100 篇在本地统计（卡片 hint 已注明口径）；待办与推荐分别来自 GET /v1/todos
  * 和 GET /v1/recommendations，由后端按截止时间与画像/内容质量排序。
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
@@ -28,7 +28,9 @@ import { categoryName } from '@/constants/categories'
 import EmptyState from '@/components/EmptyState.vue'
 import ScoreBadge from '@/components/ScoreBadge.vue'
 import SkeletonList from '@/components/SkeletonList.vue'
-import { formatRelativeTime, scoreLevel, scoreToPercent } from '@/utils/format'
+import { formatRelativeTime } from '@/utils/format'
+import { isYmd } from '@/utils/dateRange'
+import { isHighRelevance } from '@/utils/relevance'
 
 const router = useRouter()
 
@@ -123,24 +125,40 @@ onBeforeUnmount(() => {
 })
 
 // ── 概览卡片 ───────────────────────────────────────────
-const todayCount = computed(() => {
-  // published_at 是站点本地墙钟，比较基准也必须是本地日期：
-  // toISOString() 取的是 UTC，东八区 00:00–08:00 会算成前一天，卡片恒为 0。
-  const now = new Date()
-  const today = [
-    now.getFullYear(),
-    String(now.getMonth() + 1).padStart(2, '0'),
-    String(now.getDate()).padStart(2, '0'),
+/** 本地时区的 YYYY-MM-DD；不能用 toISOString()，东八区 00:00–08:00 会算成前一天 */
+function localDateString(date: Date): string {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
   ].join('-')
+}
+
+const todayCount = computed(() => {
+  // published_at 是站点本地墙钟，与展示日期一样按字符串前缀比较，避免跨时区偏移
+  const today = localDateString(new Date())
   return latest.value.filter((item) => (item.published_at ?? '').slice(0, 10) === today).length
 })
 
-const highConfidenceCount = computed(
+/**
+ * 近 7 天（含今天）的本地日期窗口。
+ * published_at 是站点墙钟，只取日期前缀比较；不要用 new Date(value) 解析，
+ * 否则浏览器时区与站点时区不一致时，午夜前后会差一天。
+ */
+function isWithinLastDays(value: string | null, days: number): boolean {
+  const day = (value ?? '').slice(0, 10)
+  if (!isYmd(day)) return false
+  const now = new Date()
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1))
+  return day >= localDateString(start) && day <= localDateString(now)
+}
+
+/** 规划书卡片口径：近 7 天文章级语义相关度 ≥80 分的公告数（最新 100 篇范围内滚动统计） */
+const highRelevanceCount = computed(
   () =>
-    latest.value.filter((item) => {
-      const percent = scoreToPercent(item.category_confidence ?? null)
-      return percent !== null && scoreLevel(percent) === 'high'
-    }).length,
+    latest.value.filter(
+      (item) => isWithinLastDays(item.published_at, 7) && isHighRelevance(item.relevance_score),
+    ).length,
 )
 
 /** 待办申报事项：项目申报类里已提取到截止时间、且截止时间在未来的条数 */
@@ -157,10 +175,10 @@ const cards = computed(() => [
   },
   {
     key: 'high',
-    label: '高置信度分类公告',
-    value: highConfidenceCount.value,
+    label: '近 7 天高相关度公告',
+    value: highRelevanceCount.value,
     unit: '篇',
-    hint: '分类置信度 ≥80 分（最新 100 篇内）',
+    hint: '文章相关度 ≥80 分（最新 100 篇、近 7 天）',
     to: { name: 'category' },
   },
   {
@@ -270,7 +288,7 @@ function openArticle(id: string): void {
             <span class="rec__item-title">{{ item.title }}</span>
             <span class="rec__meta">
               <span class="rec__time">{{ formatRelativeTime(item.published_at) }}</span>
-              <ScoreBadge :score="item.relevance" label="相关度" />
+              <ScoreBadge :score="item.relevance_score ?? null" label="相关度" />
             </span>
           </button>
         </li>

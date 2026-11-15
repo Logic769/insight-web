@@ -17,6 +17,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 import type { SearchItem, SearchPayload } from '@/api/search'
+import ArticleCard from '@/components/ArticleCard.vue'
 
 vi.mock('@/api/search', () => ({ searchArticles: vi.fn() }))
 vi.mock('@/api/articles', () => ({ listArticles: vi.fn() }))
@@ -62,6 +63,8 @@ function makeItem(id: string, score = 0.9): SearchItem {
     industry: 'next_gen_it',
     industry_confidence: 0.8,
     tags: [],
+    relevance_score: score,
+    relevance_reason: '含申报截止时间与资助额度，信息具体可行动。',
     relevance: {
       score,
       tag_confidence: 0.9,
@@ -168,6 +171,20 @@ describe('时间范围：自定义（B3 回归）', () => {
   })
 })
 
+describe('卡片评分口径', () => {
+  it('卡片使用文章级 relevance_score，查询相关度只用于排序', async () => {
+    const item = makeItem('a1', 0.95)
+    item.relevance_score = 0.72
+    vi.mocked(searchArticles).mockResolvedValue(makePayload([item]))
+
+    const { wrapper } = await mountAt('/search?q=申报')
+
+    const card = wrapper.findComponent(ArticleCard)
+    expect(card.props('score')).toBe(0.72)
+    expect(card.props('summary')).toBe('')
+  })
+})
+
 describe('页码与筛选状态从 URL 还原', () => {
   it('直达 ?high=1&page=2 时停在第 2 页（S11 回归）', async () => {
     const items = Array.from({ length: 20 }, (_, i) => makeItem('a' + String(i).padStart(2, '0')))
@@ -178,8 +195,30 @@ describe('页码与筛选状态从 URL 还原', () => {
     expect(router.currentRoute.value.query.page).toBe('2')
     const summary = wrapper.find('.pager__summary').text().replace(/\s+/g, ' ')
     expect(summary).toContain('第 2 / 2 页')
-    // 高相关度过滤仍然生效（20 条都 ≥0.8，所以还是 20 条）
+    // 高相关过滤把显示口径的真实下界下推给后端（0.795 起显示即为 80 分）
+    expect(vi.mocked(searchArticles)).toHaveBeenCalledWith(
+      '申报',
+      expect.objectContaining({ minRelevance: 0.795 }),
+    )
+    // 状态行只报过滤后的总数，不能再出现「过滤前/过滤后」两套数字
+    const status = wrapper.find('.status').text()
+    expect(status).toContain('共找到 20 条文章相关度 ≥ 80 分的结果')
+    expect(status).not.toContain('过滤为')
+    // 20 条都 ≥0.8，所以还是 20 条
     expect(wrapper.findAll('.card')).toHaveLength(10)
+  })
+
+  it('高相关模式 total 大于实际加载条数时，说明已加载条数与分页口径', async () => {
+    const items = Array.from({ length: 20 }, (_, i) => makeItem('a' + String(i).padStart(2, '0')))
+    vi.mocked(searchArticles).mockResolvedValue(makePayload(items, { total: 30 }))
+
+    const { wrapper } = await mountAt('/search?q=申报&high=1')
+
+    const status = wrapper.find('.status').text()
+    expect(status).toContain('共找到 30 条结果')
+    expect(status).toContain('当前已加载 20 条文章相关度 ≥ 80 分的结果')
+    expect(status).toContain('分页按已加载条数计算')
+    expect(wrapper.find('.pager__summary').text()).toContain('第 1 / 2 页')
   })
 
   it('页码越界收敛到末页，不显示「没有找到」（S12 回归）', async () => {

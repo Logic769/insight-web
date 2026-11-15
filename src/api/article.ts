@@ -32,6 +32,10 @@ export interface ArticleDetail {
   category_engine: string | null
   tag_engine: string | null
   extract_engine: string | null
+  /** 文章级语义相关度（0-1），详情页展示与摘要判断使用 */
+  relevance_score?: number | null
+  relevance_engine?: string | null
+  relevance_reason?: string | null
   analyzed_at: string
   tags: ArticleTag[]
   extractions: Record<string, Record<string, ExtractionField>>

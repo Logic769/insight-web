@@ -5,10 +5,11 @@
  * ── 后端缺口：前端不伪造，界面上显式标注 ──────────────────────────
  * 1. 「行业领域」：GET /v1/articles 支持 industry 单值过滤，候选来自 /v1/industries
  *    （受控词表 + 每行业文章计数）。一次只能选一个行业，再点一次取消。
- * 2. 「相关度评分」：GET /v1/articles 现在会为每篇返回后端统一计算的 relevance
- *    （与 /v1/search 的 relevance.score 同口径，0-1），卡片直接按绿≥80/黄≥60/红<60 展示。
- *    sort=relevance_* 由后端按该分数排序，不再拿 category_confidence 冒充。
- * 3. 「关键要素摘要」：列表接口同样没有该字段，卡片不传 highlights。
+ * 2. 「相关度评分」：GET /v1/articles 为每篇返回文章级语义相关度 relevance_score
+ *    （0-1），卡片直接按绿≥80/黄≥60/红<60 展示；sort=relevance_score_* 按该分排序，
+ *    不再拿 category_confidence 或画像分冒充。
+ * 3. 「关键要素摘要」：列表接口没有结构化 extractions，但有 relevance_reason（AI 摘要句），
+ *    仅当文章相关度 ≥80 分时由卡片展示为「要素摘要」。
  * 4. 后端 category 只接受单值、也没有「多分类 OR」。四个 Tab 因此各自只能映射
  *    一个大类；人才申报 / 企业资质申报 / 其他 三个大类用二级「大类」chip 直达，
  *    否则它们在这页不可达，等于丢信息。
@@ -31,6 +32,7 @@ import { useLatestRequest } from '@/composables/useLatestRequest'
 import { CATEGORY_ORDER, categoryName } from '@/constants/categories'
 import { sourceName } from '@/constants/sources'
 import { isRangeInverted, isYmd, resolveRange, type TimeRange } from '@/utils/dateRange'
+import { highRelevanceSummary } from '@/utils/relevance'
 
 /** 一个 Tab 与后端大类的映射 */
 interface CategoryTab {
@@ -60,21 +62,21 @@ const TIME_RANGES: { value: TimeRange; label: string }[] = [
 ]
 
 /**
- * 排序：后端接受发布时间/相关度两向，前端不做二次排序。
- * relevance_* 使用后端统一打出的 relevance 分数，与卡片徽标同源。
+ * 排序：后端接受发布时间/文章相关度两向，前端不做二次排序。
+ * relevance_score_* 使用文章级语义分，与卡片徽标严格同源。
  */
 const SORT_OPTIONS: { value: ArticleSort; label: string; hint: string }[] = [
   { value: 'published_desc', label: '发布时间 ↓', hint: '最新发布在前' },
   { value: 'published_asc', label: '发布时间 ↑', hint: '最早发布在前' },
   {
-    value: 'relevance_desc',
+    value: 'relevance_score_desc',
     label: '相关度 ↓',
-    hint: '按后端相关度评分从高到低',
+    hint: '按文章相关度评分从高到低',
   },
   {
-    value: 'relevance_asc',
+    value: 'relevance_score_asc',
     label: '相关度 ↑',
-    hint: '按后端相关度评分从低到高',
+    hint: '按文章相关度评分从低到高',
   },
 ]
 
@@ -195,15 +197,20 @@ interface PageState {
   pageSize: number
 }
 
-function isArticleSort(value: unknown): value is ArticleSort {
-  return (
-    value === 'published_desc' ||
-    value === 'published_asc' ||
-    value === 'confidence_desc' ||
-    value === 'confidence_asc' ||
-    value === 'relevance_desc' ||
-    value === 'relevance_asc'
-  )
+const SORT_VALUES = new Set<ArticleSort>(SORT_OPTIONS.map((option) => option.value))
+
+/**
+ * 归一化 URL 里的排序值。
+ * - 旧版 relevance_desc/relevance_asc（画像综合分）映射到文章级语义分排序；
+ * - 旧版 confidence_desc/confidence_asc 不再有对应 UI，退回默认发布时间排序，
+ *   避免出现「列表按分类置信度排、卡片却显示文章相关度」的错位。
+ */
+function normalizeArticleSort(value: unknown): ArticleSort {
+  if (value === 'relevance_desc') return 'relevance_score_desc'
+  if (value === 'relevance_asc') return 'relevance_score_asc'
+  return typeof value === 'string' && SORT_VALUES.has(value as ArticleSort)
+    ? (value as ArticleSort)
+    : 'published_desc'
 }
 
 function isTimeRange(value: unknown): value is TimeRange {
@@ -254,7 +261,7 @@ function stateFromRoute(): PageState {
     to: range === 'all' ? '' : resolved.to,
     sources: normalizeList(route.query.source),
     industry: typeof route.query.industry === 'string' ? route.query.industry.trim() : '',
-    sort: isArticleSort(sortRaw) ? sortRaw : 'published_desc',
+    sort: normalizeArticleSort(sortRaw),
     page: positiveInt(route.query.page, 1),
     pageSize: PAGE_SIZE_OPTIONS.includes(sizeRaw) ? sizeRaw : DEFAULT_PAGE_SIZE,
   }
@@ -718,7 +725,7 @@ onMounted(() => {
 
       <template v-else>
         <div class="results">
-          <!-- 相关度与排序均由后端统一打分，卡片徽标和排序键同源 -->
+          <!-- 相关度与排序均由后端按 relevance_score 打分，卡片徽标和排序键同源 -->
           <ArticleCard
             v-for="item in items"
             :key="item.article_id"
@@ -729,7 +736,8 @@ onMounted(() => {
             :category="item.category"
             :industry="item.industry"
             :industry-name="item.industry ? industryName(item.industry) : ''"
-            :score="item.relevance ?? null"
+            :score="item.relevance_score ?? null"
+            :summary="highRelevanceSummary(item.relevance_score, item.relevance_reason)"
           />
         </div>
 

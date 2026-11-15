@@ -202,15 +202,20 @@ describe('ArticleCard', () => {
       ...base,
       score: 0.9,
       highlights: ['截止 2026-11-30'],
+      summary: '含申报截止时间与资助额度，信息具体可行动。',
     })
     expect(high.wrapper.text()).toContain('截止 2026-11-30')
+    expect(high.wrapper.text()).toContain('要素摘要')
+    expect(high.wrapper.text()).toContain('含申报截止时间与资助额度')
 
     const low = await mountWithRouter(ArticleCard, {
       ...base,
       score: 0.5,
       highlights: ['截止 2026-11-30'],
+      summary: '含申报截止时间与资助额度，信息具体可行动。',
     })
     expect(low.wrapper.text()).not.toContain('截止 2026-11-30')
+    expect(low.wrapper.text()).not.toContain('要素摘要')
   })
 })
 

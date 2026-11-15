@@ -23,13 +23,20 @@ export interface ArticleListItem {
   body: string | null
   /** 列表的标签没有 evidence 字段，与 /v1/search 的 SearchTag 不是同一个形状 */
   tags: ListTag[]
-  /** 列表/推荐统一由后端打出的相关度（0-1）；旧后端不返回时为 null */
+  /** 个性化推荐综合分（0-1，画像/内容质量混合）；文章级语义分见 relevance_score */
   relevance?: number | null
-  /** 相关度理由，例如「匹配关注行业」 */
+  /** 文章级语义相关度（0-1），规划书要求的相关度评分来源；旧库为空 */
+  relevance_score?: number | null
+  /** 语义相关度打分引擎 */
+  relevance_engine?: string | null
+  /** 语义相关度理由/AI 摘要，高相关时可用作卡片关键要素摘要 */
   relevance_reason?: string | null
 }
 
-/** 列表排序键；后端接受发布时间/相关度两向，相关度由后端打分 */
+/**
+ * 列表排序键。
+ * relevance_score_* 按文章级语义相关度排；relevance_* 是旧画像综合分，保留兼容。
+ */
 export type ArticleSort =
   | 'published_desc'
   | 'published_asc'
@@ -37,6 +44,8 @@ export type ArticleSort =
   | 'confidence_asc'
   | 'relevance_desc'
   | 'relevance_asc'
+  | 'relevance_score_desc'
+  | 'relevance_score_asc'
 
 export interface ArticleListPage {
   items: ArticleListItem[]
@@ -75,6 +84,8 @@ export interface ArticleListOptions {
   publishedTo?: string
   /** 排序键，默认 published_desc */
   sort?: ArticleSort
+  /** 只要文章级语义相关度不低于该值（0-1）的结果 */
+  minRelevance?: number
   limit?: number
   offset?: number
 }
@@ -89,6 +100,9 @@ export async function listArticles(options: ArticleListOptions = {}): Promise<Ar
   if (options.publishedTo) params.set('published_to', options.publishedTo)
   for (const source of options.sources ?? []) params.append('source', source)
   if (options.industry) params.set('industry', options.industry)
+  if (options.minRelevance !== undefined) {
+    params.set('min_relevance', String(options.minRelevance))
+  }
   params.set('limit', String(options.limit ?? 20))
   params.set('offset', String(options.offset ?? 0))
 

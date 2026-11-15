@@ -31,6 +31,8 @@ const props = withDefaults(
     matchedTerms?: string[]
     /** 关键要素摘要，如「截止 2026-11-30」「补贴 50 万」 */
     highlights?: string[]
+    /** 列表接口无结构化要素时的 AI 摘要句（仅高相关度显示） */
+    summary?: string
     /** 显示“查看详情 →” */
     showMore?: boolean
   }>(),
@@ -41,6 +43,7 @@ const props = withDefaults(
     score: null,
     matchedTerms: () => [],
     highlights: () => [],
+    summary: '',
     showMore: true,
   },
 )
@@ -50,6 +53,13 @@ const percent = computed(() => scoreToPercent(props.score))
 const showHighlights = computed(
   () =>
     props.highlights.length > 0 && percent.value !== null && scoreLevel(percent.value) === 'high',
+)
+/** 摘要同样只在高相关度时出现（规划书：仅高相关公告显示要素摘要） */
+const showSummary = computed(
+  () =>
+    props.summary.trim().length > 0 &&
+    percent.value !== null &&
+    scoreLevel(percent.value) === 'high',
 )
 
 const emit = defineEmits<{
@@ -75,6 +85,10 @@ const emit = defineEmits<{
       <h2 class="card__title">
         <SearchHighlight :text="title" :terms="matchedTerms" />
       </h2>
+
+      <p v-if="showSummary" class="card__summary">
+        <span class="card__summary-label">要素摘要</span>{{ summary }}
+      </p>
 
       <ul v-if="showHighlights" class="card__highlights">
         <li v-for="item in highlights" :key="item" class="card__highlight">{{ item }}</li>
@@ -164,6 +178,23 @@ const emit = defineEmits<{
 
 .card:hover .card__title {
   color: var(--color-primary);
+}
+
+.card__summary {
+  margin: 0 0 var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-left: 3px solid var(--color-success);
+  border-radius: var(--radius-base);
+  background: var(--color-success-bg);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-base);
+}
+
+.card__summary-label {
+  margin-right: var(--space-1);
+  color: var(--color-success);
+  font-weight: var(--font-weight-medium);
 }
 
 .card__highlights {

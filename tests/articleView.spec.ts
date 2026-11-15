@@ -10,6 +10,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 import type { ArticleDetail } from '@/api/article'
 import type { ArticleListItem } from '@/api/articles'
+import ArticleCard from '@/components/ArticleCard.vue'
 
 const getArticle = vi.fn()
 const getChecklist = vi.fn()
@@ -71,6 +72,9 @@ function detail(overrides: Partial<ArticleDetail> = {}): ArticleDetail {
     analyzed_at: '2026-11-06T10:00:00+00:00',
     tags: [{ tag: 'funding', confidence: 0.8, evidence: '补贴', engine: 'llm' }],
     extractions: {},
+    relevance_score: 0.91,
+    relevance_engine: 'llm',
+    relevance_reason: '含申报截止时间与资助额度，信息具体可行动。',
     ...overrides,
   }
 }
@@ -92,6 +96,8 @@ function listItem(id: string): ArticleListItem {
     analyzed_at: '2026-11-05T10:00:00+00:00',
     body: null,
     tags: [],
+    relevance_score: 0.88,
+    relevance_reason: '同分类高相关公告，含截止时间。',
   }
 }
 
@@ -181,6 +187,32 @@ describe('ArticleView 关键要素', () => {
   })
 })
 
+describe('ArticleView 相关度展示', () => {
+  it('高相关展示 AI 要素摘要，并保留关键信息卡', async () => {
+    getArticle.mockResolvedValue(detail())
+    const wrapper = await mountView()
+    expect(wrapper.text()).toContain('AI 要素摘要')
+    expect(wrapper.text()).toContain('含申报截止时间与资助额度')
+    expect(wrapper.find('.fields').exists()).toBe(true)
+  })
+
+  it('低相关不展示 AI 要素摘要，但关键信息仍照常展示', async () => {
+    getArticle.mockResolvedValue(
+      detail({ relevance_score: 0.5, relevance_reason: '一般性政策动态。' }),
+    )
+    const wrapper = await mountView()
+    expect(wrapper.text()).not.toContain('AI 要素摘要')
+    expect(wrapper.find('.fields').exists()).toBe(true)
+  })
+
+  it('高相关但摘要只有空白字符时不渲染空摘要卡', async () => {
+    getArticle.mockResolvedValue(detail({ relevance_score: 0.95, relevance_reason: '   ' }))
+    const wrapper = await mountView()
+    expect(wrapper.text()).not.toContain('AI 要素摘要')
+    expect(wrapper.find('.fields').exists()).toBe(true)
+  })
+})
+
 describe('ArticleView 正文与收藏', () => {
   it('优先渲染后端清洗后的 body_html，并生成目录锚点', async () => {
     getArticle.mockResolvedValue(
@@ -242,6 +274,9 @@ describe('ArticleView 相关公告', () => {
     const related = wrapper.findAll('.related__list .card')
     expect(related.length).toBe(2)
     expect(wrapper.text()).not.toContain('同分类公告 a1')
+    const relatedCards = wrapper.findAllComponents(ArticleCard)
+    expect(relatedCards[0]!.props('score')).toBe(0.88)
+    expect(relatedCards[0]!.props('summary')).toContain('同分类高相关公告')
   })
 
   it('没有分类时不请求推荐，也不渲染整块', async () => {

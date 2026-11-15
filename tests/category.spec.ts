@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 import type { ArticleListItem, ArticleListPage } from '@/api/articles'
+import ArticleCard from '@/components/ArticleCard.vue'
 
 vi.mock('@/api/articles', () => ({ listArticles: vi.fn() }))
 vi.mock('@/api/sources', () => ({ listSources: vi.fn() }))
@@ -232,14 +233,32 @@ describe('排序与分页', () => {
     const { wrapper } = await mountPage()
     for (const [label, value] of [
       ['发布时间 ↑', 'published_asc'],
-      ['相关度 ↓', 'relevance_desc'],
-      ['相关度 ↑', 'relevance_asc'],
+      ['相关度 ↓', 'relevance_score_desc'],
+      ['相关度 ↑', 'relevance_score_asc'],
       ['发布时间 ↓', 'published_desc'],
     ] as const) {
       await buttonByText(wrapper, label)!.trigger('click')
       await flushPromises()
       expect(lastOptions().sort).toBe(value)
     }
+  })
+
+  it('卡片使用文章级相关度，只有高相关才带要素摘要', async () => {
+    vi.mocked(listArticles).mockResolvedValue(
+      makePage([
+        makeItem('high', {
+          relevance_score: 0.9,
+          relevance_reason: '截止 2026-11-30，补贴 50 万。',
+        }),
+        makeItem('low', { relevance_score: 0.5, relevance_reason: '一般性政策动态。' }),
+      ]),
+    )
+    const { wrapper } = await mountPage()
+    const cards = wrapper.findAllComponents(ArticleCard)
+    expect(cards[0]!.props('score')).toBe(0.9)
+    expect(cards[0]!.props('summary')).toContain('截止 2026-11-30')
+    expect(cards[1]!.props('score')).toBe(0.5)
+    expect(cards[1]!.props('summary')).toBe('')
   })
 
   it('默认每页 10 条，切到 20 条后回到第 1 页并带上 offset', async () => {
@@ -300,16 +319,36 @@ describe('三态与 URL', () => {
     // total 必须够大：否则第 2 页会被「页码越界」逻辑拉回第 1 页，测不到 offset
     vi.mocked(listArticles).mockResolvedValue(makePage([makeItem('a1')], 120))
     const router = makeRouter()
-    await router.push('/category?cat=funding_subsidy&range=30d&sort=confidence_desc&page=2')
+    await router.push('/category?cat=funding_subsidy&range=30d&sort=relevance_score_desc&page=2')
     await router.isReady()
     mount(CategoryView, { global: { plugins: [router] } })
     await flushPromises()
 
     const options = lastOptions()
     expect(options.category).toBe('funding_subsidy')
-    expect(options.sort).toBe('confidence_desc')
+    expect(options.sort).toBe('relevance_score_desc')
     expect(options.offset).toBe(10)
     expect(options.publishedFrom).toBeTruthy()
+  })
+
+  it('旧版 relevance_desc 链接归一化为文章相关度排序', async () => {
+    const router = makeRouter()
+    await router.push('/category?sort=relevance_desc')
+    await router.isReady()
+    mount(CategoryView, { global: { plugins: [router] } })
+    await flushPromises()
+
+    expect(lastOptions().sort).toBe('relevance_score_desc')
+  })
+
+  it('已下线的分类置信度排序退回发布时间，避免与卡片评分错位', async () => {
+    const router = makeRouter()
+    await router.push('/category?sort=confidence_desc')
+    await router.isReady()
+    mount(CategoryView, { global: { plugins: [router] } })
+    await flushPromises()
+
+    expect(lastOptions().sort).toBe('published_desc')
   })
 })
 

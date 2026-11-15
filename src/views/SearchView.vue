@@ -5,7 +5,8 @@
  * 结果列表（相关度高亮 + 评分）、搜索建议（≤8）、空状态与热词、搜索结果统计
  * （共 X 条 / 用时 Y 毫秒）、每页条数 10/20/50 切换。
  *
- * 排序完全由后端决定（score = 0.7 标签 + 0.2 标题 + 0.1 正文），前端不再排序；
+ * 排序完全由后端决定（查询相关度 score = 0.7 标签 + 0.2 标题 + 0.1 正文），前端不再排序；
+ * 卡片评分与「仅看高相关度」使用文章级语义相关度 relevance_score，两者口径不同，别混。
  * 时间范围、发布单位与行业领域同样交给后端过滤。两处口径不同，别混：
  * - 日期过滤按**卡片上显示的那一天**（站点墙钟 published_at 的日期前缀，后端 _DAY_EXPR）
  * - 排序按**真实时刻** published_at_utc（混时区站点才不会按墙钟排错）
@@ -34,6 +35,11 @@ import { listTags, tagName, type TagDef } from '@/api/tags'
 import { readJson, writeJson } from '@/utils/storage'
 import { STORAGE_KEYS } from '@/utils/storageKeys'
 import { isRangeInverted, isYmd, resolveRange, type TimeRange } from '@/utils/dateRange'
+import {
+  HIGH_RELEVANCE_FILTER_SCORE,
+  highRelevanceSummary,
+  isHighRelevance,
+} from '@/utils/relevance'
 
 interface CardItem {
   article_id: string
@@ -42,7 +48,10 @@ interface CardItem {
   published_at: string | null
   category: string | null
   industry: string | null
+  /** 文章级语义相关度（0-1） */
   score: number | null
+  /** 高相关时展示的 AI 要素摘要 */
+  summary: string
   matchedTerms: string[]
 }
 
@@ -66,9 +75,9 @@ const TIME_RANGES: { value: TimeRange; label: string }[] = [
   { value: 'custom', label: '自定义' },
 ]
 
-/** 类内排序；浏览模式没有相关度（列表接口不返回），会退回最新发布 */
+/** 类内排序；relevance 指关键词查询相关度，浏览模式没有该排序，会退回最新发布 */
 const SORT_OPTIONS: { value: SearchSort; label: string }[] = [
-  { value: 'relevance', label: '相关度优先' },
+  { value: 'relevance', label: '关键词相关度优先' },
   { value: 'published_desc', label: '最新发布' },
   { value: 'published_asc', label: '最早发布' },
 ]
@@ -101,7 +110,7 @@ const pageSize = ref(10)
 const searchHistory = ref<string[]>(readJson<string[]>(STORAGE_KEYS.SEARCH_HISTORY, []))
 /** 本次检索耗时（毫秒），规范模块五（6）要求展示 */
 const elapsedMs = ref<number | null>(null)
-/** 高级搜索里的「仅看高相关度」：后端没有该参数，只能对已返回的条目按 score 过滤 */
+/** 高级搜索里的「仅看高相关度」：按文章级语义相关度过滤，并下推 min_relevance 给后端 */
 const highRelevanceOnly = ref(false)
 const suggestOpen = ref(false)
 /** 键盘高亮的下标，-1 表示没有选中建议 */
@@ -137,14 +146,14 @@ const activeRange = computed(() => resolveRange(timeRange.value, customFrom.valu
 const rangeInvalid = computed(() => isRangeInverted(activeRange.value))
 
 /**
- * 浏览模式（/v1/articles）没有 relevance 排序：传进来会退化成最新发布，
- * 界面上的「相关度优先」在这种模式下也置灰，不给出无效选项。
+ * 浏览模式（/v1/articles）没有关键词查询相关度排序：传进来会退化成最新发布，
+ * 界面上的「关键词相关度优先」在这种模式下也置灰，不给出无效选项。
  */
 const effectiveBrowseSort = computed<'published_desc' | 'published_asc'>(() =>
   sort.value === 'published_asc' ? 'published_asc' : 'published_desc',
 )
 
-/** 当前模式真正生效的排序：浏览模式没有 relevance，降级为最新发布，展示与实际必须一致 */
+/** 当前模式真正生效的排序：浏览模式没有查询相关度排序，降级为最新发布，展示与实际必须一致 */
 const effectiveSort = computed<SearchSort>(() =>
   browseCategory.value ? effectiveBrowseSort.value : sort.value,
 )
@@ -159,16 +168,17 @@ const allSearchItems = computed<CardItem[]>(() => {
       published_at: item.published_at,
       category: item.category,
       industry: item.industry,
-      score: item.relevance.score,
+      score: item.relevance_score ?? null,
+      summary: highRelevanceSummary(item.relevance_score, item.relevance_reason),
       matchedTerms: item.relevance.matched_terms,
     })),
   )
 })
 
-/** 高级搜索的「仅看高相关度」：score 是后端给的相关度（0-1），只有检索模式有 */
+/** 高级搜索的「仅看高相关度」：按文章级语义相关度过滤，只有检索模式有该开关 */
 const visibleSearchItems = computed<CardItem[]>(() =>
   highRelevanceOnly.value
-    ? allSearchItems.value.filter((item) => (item.score ?? 0) >= 0.8)
+    ? allSearchItems.value.filter((item) => isHighRelevance(item.score))
     : allSearchItems.value,
 )
 
@@ -237,9 +247,15 @@ const statusText = computed(() => {
     if (!totalCount.value) {
       return '没有找到与「' + submitted.value + '」相关的公告' + filterPart + tagPart
     }
+    // total 是后端命中数，loadedCount 是前端真正拿到的条数：两者不一致时，
+    // 分页只能按 loadedCount 计算，状态行必须把「已加载多少」说清楚。
     const partial =
-      !highRelevanceOnly.value && loadedCount.value < totalCount.value
-        ? '，当前展示前 ' + loadedCount.value + ' 条'
+      loadedCount.value < totalCount.value
+        ? highRelevanceOnly.value
+          ? '，当前已加载 ' +
+            loadedCount.value +
+            ' 条文章相关度 ≥ 80 分的结果（分页按已加载条数计算）'
+          : '，当前展示前 ' + loadedCount.value + ' 条'
         : ''
     // 带了时间条件时，可能有命中关键词但两个时间列都判不出日期的条目被排除；
     // 不说明的话用户会以为「明明库里有，怎么就少了这几篇」。
@@ -249,25 +265,24 @@ const statusText = computed(() => {
         : ''
     const truncatedNote = payload.value?.truncated ? '；候选集已打满 2000 条，结果可能不完整' : ''
     const cost = elapsedMs.value === null ? '' : '，用时 ' + elapsedMs.value + ' 毫秒'
-    // 「共找到 N 条」是后端命中数（过滤前），分页器上的条数是过滤后的。两者不一致
-    // 必须当场说清，否则读者会以为分页器算错了；开了过滤时「当前展示前 N 条」
-    // 已被下面这句覆盖，不再重复。
-    const high = highRelevanceOnly.value
-      ? '，已按相关度 ≥ 80% 过滤为 ' + loadedCount.value + ' 条（分页按过滤后计算）'
-      : ''
+    // 开启「仅看高相关度」且所有命中都已加载时，total 就是过滤后的条数；
+    // 若 total > loadedCount（per_category 截断或旧后端忽略 min_relevance），
+    // 改用通用「结果」措辞，再由 partial 说明实际加载的高相关条数。
+    const resultText =
+      highRelevanceOnly.value && loadedCount.value >= totalCount.value
+        ? '共找到 ' + totalCount.value + ' 条文章相关度 ≥ 80 分的结果'
+        : '共找到 ' + totalCount.value + ' 条结果'
     return (
       '关键词「' +
       submitted.value +
-      '」共找到 ' +
-      totalCount.value +
-      ' 条结果' +
+      '」' +
+      resultText +
       filterPart +
       partial +
       undated +
       truncatedNote +
       tagPart +
-      cost +
-      high
+      cost
     )
   }
   if (browseCategory.value) {
@@ -498,6 +513,7 @@ async function run(): Promise<void> {
         industries: selectedIndustry.value ? [selectedIndustry.value] : [],
         publishedFrom: range.from || undefined,
         publishedTo: range.to || undefined,
+        minRelevance: highRelevanceOnly.value ? HIGH_RELEVANCE_FILTER_SCORE : undefined,
         sort: sort.value,
       })
       if (!latest.isCurrent(requestId)) return
@@ -529,8 +545,9 @@ async function run(): Promise<void> {
         published_at: item.published_at,
         category: item.category,
         industry: item.industry,
-        // 列表接口不返回相关度，分类置信度不冒充评分，这里不显示角标
-        score: null,
+        // 浏览模式也展示文章级语义相关度，分类置信度不冒充评分
+        score: item.relevance_score ?? null,
+        summary: highRelevanceSummary(item.relevance_score, item.relevance_reason),
         matchedTerms: [],
       }))
       browseTotal.value = result.total
@@ -1021,7 +1038,7 @@ onMounted(() => {
               :disabled="!submitted"
               @change="onHighChange"
             />
-            仅看高相关度（≥80 分）
+            仅看高相关度（文章相关度 ≥80 分）
           </label>
           <span v-if="!submitted" class="adv-hint">输入关键词后可用</span>
         </div>
@@ -1100,6 +1117,7 @@ onMounted(() => {
           :industry="card.industry"
           :industry-name="card.industry ? industryName(card.industry) : ''"
           :score="card.score"
+          :summary="card.summary"
           :matched-terms="card.matchedTerms"
         />
       </div>

@@ -46,7 +46,14 @@ export interface SearchItem {
   industry_confidence: number | null
   /** 后端返回的是对象数组，不是字符串数组（要标签名用 tags.map((t) => t.tag)） */
   tags: SearchTag[]
+  /** 查询相关度明细（关键词命中打分），用于排序与命中提示 */
   relevance: SearchRelevance
+  /** 文章级语义相关度（0-1），卡片评分与「仅看高相关度」使用该字段 */
+  relevance_score?: number | null
+  /** 语义相关度打分引擎 */
+  relevance_engine?: string | null
+  /** 语义相关度理由/AI 摘要 */
+  relevance_reason?: string | null
   /** include_body=true 时才有 */
   body?: string
 }
@@ -103,6 +110,8 @@ export interface SearchOptions {
   publishedTo?: string
   /** 类内排序，默认 relevance（后端按 0.7 标签 + 0.2 标题 + 0.1 正文算） */
   sort?: SearchSort
+  /** 只要文章级语义相关度不低于该值（0-1）的结果 */
+  minRelevance?: number
   /** 每个大类返回多少条（后端上限 100） */
   perCategory?: number
   /** 是否返回正文（默认 false，省带宽） */
@@ -130,6 +139,9 @@ export async function searchArticles(
   qs.set('per_category', String(options.perCategory ?? 100))
   qs.set('include_body', String(options.includeBody ?? false))
   if (options.sort) qs.set('sort', options.sort)
+  if (options.minRelevance !== undefined) {
+    qs.set('min_relevance', String(options.minRelevance))
+  }
   if (options.publishedFrom) qs.set('published_from', options.publishedFrom)
   if (options.publishedTo) qs.set('published_to', options.publishedTo)
   for (const category of options.categories ?? []) {

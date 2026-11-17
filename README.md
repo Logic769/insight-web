@@ -12,6 +12,17 @@ npm run dev      # 启动开发服务器，默认 http://localhost:5173
 > 端口被占用时 Vite 会自动换一个（比如 5183），**以终端输出的地址为准**。
 > dev server 只监听 localhost（IPv6 的 `::1`），所以要用 `http://localhost:端口` 访问；`http://127.0.0.1:端口` 可能连不上。
 
+## 生产部署（Docker + Nginx）
+
+```bash
+docker compose build web
+docker compose up -d web
+```
+
+默认通过 `http://localhost`（80）跳转到 `https://localhost`（443），使用镜像内自签证书；浏览器需手动信任或使用 `curl -k`。生产环境把正式证书挂载到 `/etc/nginx/certs`（`fullchain.pem` / `privkey.pem`）并取消 `docker-compose.yml` 里的 volume 注释。
+
+Nginx 负责 Gzip、`/assets` 一年 immutable 缓存、SPA history 回退，并把 `/api/` 反代到 `news-insight:8020`；后端 API Key 只通过 `INSIGHT_API_KEY` 环境变量注入，不打进前端产物。前端容器需要加入 `news-insight` 的 Docker 网络（默认 `news-insight_default`，可用 `INSIGHT_NETWORK` 覆盖）。
+
 ## 常用命令
 
 | 命令 | 作用 |
@@ -28,7 +39,7 @@ npm run dev      # 启动开发服务器，默认 http://localhost:5173
 
 ## 测试与门禁
 
-- 测试框架：Vitest + @vue/test-utils + jsdom，用例在 `tests/`，共 5 个 spec；
+- 测试框架：Vitest + @vue/test-utils + jsdom，用例在 `tests/`，共 19 个 spec、207 条用例；
 - 覆盖范围：`src/components`（七个公共组件的 Props/Events 与导航交互）、`src/stores/auth`、`src/utils`、`src/api/http.ts`；当前实测 87.8% 语句 / 81.6% 分支；
 - 提交前建议依次跑：`npm run typecheck` → `npm run lint` → `npm run lint:style` → `npm test` → `npm run build`；
 - Git 钩子：husky `pre-commit` 跑 lint-staged（ESLint + Prettier），`commit-msg` 用 commitlint 校验 Conventional Commits；
@@ -44,6 +55,8 @@ npm run dev      # 启动开发服务器，默认 http://localhost:5173
 | Vite | 8.3.8 | 构建工具（底层 Rolldown） |
 | Vue Router | 4.x | 路由（懒加载 + 守卫） |
 | Pinia | 3.x | 状态管理（setup 语法） |
+| Element Plus | 2.14.8 | UI 组件库（按需引入） |
+| Axios | 1.21.1 | HTTP 客户端（统一响应解包） |
 | vue-tsc | 3.3.14 | .vue 文件的类型检查 |
 | ESLint + Prettier | - | 代码规范 |
 

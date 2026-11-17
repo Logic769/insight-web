@@ -439,6 +439,20 @@ function setTab(tab: CategoryTab): void {
   apply()
 }
 
+function toggleSource(source: string): void {
+  const index = selectedSources.value.indexOf(source)
+  if (index >= 0) selectedSources.value.splice(index, 1)
+  else selectedSources.value.push(source)
+  page.value = 1
+  apply()
+}
+
+function setIndustry(id: string): void {
+  selectedIndustry.value = selectedIndustry.value === id ? '' : id
+  page.value = 1
+  apply()
+}
+
 function setCategory(id: string): void {
   if (selectedCategory.value === id) return
   // 二级 chip 与 Tab 是同一份状态：这里改了，activeTabKey 会跟着高亮（没有对应 Tab 的类则都不亮）
@@ -457,21 +471,6 @@ function setTimeRange(value: TimeRange): void {
 
 function onCustomDateChange(): void {
   if (timeRange.value !== 'custom') timeRange.value = 'custom'
-  page.value = 1
-  apply()
-}
-
-function toggleSource(id: string): void {
-  selectedSources.value = selectedSources.value.includes(id)
-    ? selectedSources.value.filter((item) => item !== id)
-    : [...selectedSources.value, id]
-  page.value = 1
-  apply()
-}
-
-/** 行业单选：再点已选中的行业即取消 */
-function toggleIndustry(id: string): void {
-  selectedIndustry.value = selectedIndustry.value === id ? '' : id
   page.value = 1
   apply()
 }
@@ -552,99 +551,108 @@ onMounted(() => {
       </p>
     </header>
 
-    <nav class="tabs" aria-label="分类标签页">
-      <button
+    <div class="tabs" role="tablist" aria-label="分类标签页">
+      <el-button
         v-for="tab in TABS"
         :key="tab.key"
         class="tab"
         :class="{ 'tab--active': activeTabKey === tab.key }"
-        type="button"
-        :aria-pressed="activeTabKey === tab.key"
+        :type="activeTabKey === tab.key ? 'primary' : 'default'"
         @click="setTab(tab)"
       >
         {{ tab.label }}
-      </button>
-    </nav>
+      </el-button>
+    </div>
 
     <section class="filters" aria-label="二级筛选">
       <div class="adv-row">
         <span class="adv-row__label">大类</span>
         <div class="adv-row__body">
-          <button
-            class="chip"
-            :class="{ 'chip--active': selectedCategory === '' }"
-            type="button"
-            :aria-pressed="selectedCategory === ''"
-            @click="setCategory('')"
-          >
-            全部
-          </button>
-          <button
-            v-for="id in CATEGORY_ORDER"
-            :key="id"
-            class="chip"
-            :class="{ 'chip--active': selectedCategory === id }"
-            type="button"
-            :aria-pressed="selectedCategory === id"
-            @click="setCategory(id)"
-          >
-            {{ categoryName(id) }}
-          </button>
+          <div class="chip-row">
+            <el-button
+              v-for="item in [
+                { id: '', name: '全部' },
+                ...CATEGORY_ORDER.map((id) => ({ id, name: categoryName(id) })),
+              ]"
+              :key="item.id || 'all'"
+              class="chip"
+              :class="{ 'chip--active': selectedCategory === item.id }"
+              round
+              size="small"
+              :type="selectedCategory === item.id ? 'primary' : 'default'"
+              @click="setCategory(item.id)"
+            >
+              {{ item.name }}
+            </el-button>
+          </div>
         </div>
       </div>
 
       <div class="adv-row">
         <span class="adv-row__label">时间范围</span>
         <div class="adv-row__body">
-          <button
-            v-for="item in TIME_RANGES"
-            :key="item.value"
-            class="chip"
-            :class="{ 'chip--active': timeRange === item.value }"
-            type="button"
-            :aria-pressed="timeRange === item.value"
-            @click="setTimeRange(item.value)"
-          >
-            {{ item.label }}
-          </button>
+          <div class="chip-row">
+            <el-button
+              v-for="item in TIME_RANGES"
+              :key="item.value"
+              class="chip"
+              :class="{ 'chip--active': timeRange === item.value }"
+              round
+              size="small"
+              :type="timeRange === item.value ? 'primary' : 'default'"
+              @click="setTimeRange(item.value)"
+            >
+              {{ item.label }}
+            </el-button>
+          </div>
           <template v-if="timeRange === 'custom'">
-            <input
+            <el-date-picker
               v-model="customFrom"
-              class="adv-date"
               type="date"
+              value-format="YYYY-MM-DD"
+              placeholder="开始日期"
               aria-label="开始日期"
               @change="onCustomDateChange"
             />
             <span class="adv-row__sep">至</span>
-            <input
+            <el-date-picker
               v-model="customTo"
-              class="adv-date"
               type="date"
+              value-format="YYYY-MM-DD"
+              placeholder="结束日期"
               aria-label="结束日期"
               @change="onCustomDateChange"
             />
           </template>
         </div>
       </div>
-      <p v-if="rangeInvalid" class="adv-error" role="alert">
-        开始日期不能晚于结束日期，请调整后重试。
-      </p>
+      <el-alert
+        v-if="rangeInvalid"
+        class="adv-error"
+        type="error"
+        :closable="false"
+        show-icon
+        title="开始日期不能晚于结束日期，请调整后重试。"
+      />
 
       <div class="adv-row">
         <span class="adv-row__label">发布单位</span>
         <div class="adv-row__body">
-          <button
-            v-for="item in sources"
-            :key="item.source"
-            class="chip"
-            :class="{ 'chip--active': selectedSources.includes(item.source) }"
-            type="button"
-            :aria-pressed="selectedSources.includes(item.source)"
-            @click="toggleSource(item.source)"
-          >
-            {{ sourceName(item.source) }}
-            <span class="chip__count num">{{ item.count }}</span>
-          </button>
+          <div class="chip-row">
+            <el-button
+              v-for="item in sources"
+              :key="item.source"
+              class="chip"
+              :class="{ 'chip--active': selectedSources.includes(item.source) }"
+              round
+              size="small"
+              :type="selectedSources.includes(item.source) ? 'primary' : 'default'"
+              @click="toggleSource(item.source)"
+            >
+              {{ sourceName(item.source) }}
+              <span class="chip__count num">{{ item.count }}</span>
+            </el-button>
+          </div>
           <span v-if="!sources.length" class="adv-hint">{{ sourcesError || '暂无可选来源' }}</span>
         </div>
       </div>
@@ -652,19 +660,32 @@ onMounted(() => {
       <div class="adv-row">
         <span class="adv-row__label">行业领域</span>
         <div class="adv-row__body">
-          <button
-            v-for="item in industries"
-            :key="item.id"
-            class="chip"
-            :class="{ 'chip--active': selectedIndustry === item.id }"
-            type="button"
-            :aria-pressed="selectedIndustry === item.id"
-            :title="item.description"
-            @click="toggleIndustry(item.id)"
-          >
-            {{ item.name }}
-            <span class="chip__count num">{{ item.article_count }}</span>
-          </button>
+          <div class="chip-row">
+            <el-button
+              v-for="item in [
+                { id: '', name: '全部' },
+                ...industries.map((item) => ({
+                  id: item.id,
+                  name: item.name,
+                  description: item.description,
+                  article_count: item.article_count,
+                })),
+              ]"
+              :key="item.id || 'all'"
+              class="chip"
+              :class="{ 'chip--active': selectedIndustry === item.id }"
+              round
+              size="small"
+              :type="selectedIndustry === item.id ? 'primary' : 'default'"
+              :title="'description' in item ? item.description : undefined"
+              @click="setIndustry(item.id)"
+            >
+              {{ item.name }}
+              <span v-if="'article_count' in item" class="chip__count num">{{
+                item.article_count
+              }}</span>
+            </el-button>
+          </div>
           <span v-if="!industries.length" class="adv-hint">
             {{ industriesError || '暂无可选行业' }}
           </span>
@@ -674,26 +695,29 @@ onMounted(() => {
       <div class="adv-row">
         <span class="adv-row__label">排序</span>
         <div class="adv-row__body">
-          <button
-            v-for="item in SORT_OPTIONS"
-            :key="item.value"
-            class="chip"
-            :class="{ 'chip--active': sort === item.value }"
-            type="button"
-            :aria-pressed="sort === item.value"
-            :title="item.hint"
-            @click="setSort(item.value)"
-          >
-            {{ item.label }}
-          </button>
+          <div class="chip-row">
+            <el-button
+              v-for="item in SORT_OPTIONS"
+              :key="item.value"
+              class="chip"
+              :class="{ 'chip--active': sort === item.value }"
+              round
+              size="small"
+              :type="sort === item.value ? 'primary' : 'default'"
+              :title="item.hint"
+              @click="setSort(item.value)"
+            >
+              {{ item.label }}
+            </el-button>
+          </div>
         </div>
       </div>
 
       <div class="filters__foot">
         <span class="filters__summary">{{ filterSummary || '未叠加筛选条件' }}</span>
-        <button v-if="hasFilters" class="btn btn--text" type="button" @click="resetFilters">
+        <el-button v-if="hasFilters" link type="primary" @click="resetFilters">
           重置筛选
-        </button>
+        </el-button>
       </div>
     </section>
 
@@ -703,7 +727,7 @@ onMounted(() => {
 
     <EmptyState v-else-if="error" variant="error" title="公告加载失败" :description="error">
       <template #action>
-        <button class="btn btn--primary" type="button" @click="run">重试</button>
+        <el-button type="primary" @click="run">重试</el-button>
       </template>
     </EmptyState>
 
@@ -717,9 +741,7 @@ onMounted(() => {
         :description="emptyDescription"
       >
         <template #action>
-          <button v-if="hasFilters" class="btn btn--ghost" type="button" @click="resetFilters">
-            重置筛选
-          </button>
+          <el-button v-if="hasFilters" @click="resetFilters">重置筛选</el-button>
         </template>
       </EmptyState>
 
@@ -779,13 +801,18 @@ onMounted(() => {
   color: var(--color-text-secondary);
 }
 
-/* 标签页：下划线式，未选中用与分割线同色的底边，避免写裸色值 transparent */
+/* 标签页：Element Plus 下划线式 */
 .tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
   margin-bottom: var(--space-4);
-  border-bottom: 1px solid var(--color-split);
+}
+
+.tabs :deep(.el-tabs__header) {
+  margin: 0;
+}
+
+.tabs :deep(.el-tabs__nav-wrap::after) {
+  height: 1px;
+  background: var(--color-split);
 }
 
 .tab {

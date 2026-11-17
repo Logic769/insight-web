@@ -153,26 +153,30 @@ describe('SkeletonList', () => {
 describe('AppPager', () => {
   it('总页数不超过 7 时全部列出，首尾按钮按边界禁用', () => {
     const wrapper = mount(AppPager, { props: { page: 1, totalPages: 3 } })
-    expect(wrapper.findAll('.pager__num')).toHaveLength(3)
+    expect(wrapper.findAll('.el-pager li')).toHaveLength(3)
     const buttons = wrapper.findAll('button')
     expect(buttons[0]!.attributes('disabled')).toBeDefined()
   })
 
   it('点击页码发出 update:page', async () => {
     const wrapper = mount(AppPager, { props: { page: 2, totalPages: 5 } })
-    await wrapper.findAll('.pager__num')[2]!.trigger('click')
+    await wrapper.findAll('.el-pager li')[2]!.trigger('click')
     expect(wrapper.emitted('update:page')?.[0]).toEqual([3])
   })
 
-  it('页数很多时只显示当前页附近 5 个', () => {
+  it('页数很多时显示首尾页与当前页附近页码', () => {
     const wrapper = mount(AppPager, { props: { page: 10, totalPages: 20 } })
-    const numbers = wrapper.findAll('.pager__num').map((n) => n.text())
-    expect(numbers).toEqual(['8', '9', '10', '11', '12'])
+    const numbers = wrapper
+      .findAll('.el-pager li')
+      .map((n) => n.text())
+      .filter((text) => text !== '')
+    expect(numbers).toEqual(['1', '9', '10', '11', '20'])
   })
 
   it('切换每页条数发出 update:pageSize', async () => {
     const wrapper = mount(AppPager, { props: { page: 1, totalPages: 5, pageSize: 10, total: 42 } })
-    await wrapper.find('select').setValue('20')
+    wrapper.findComponent({ name: 'ElPagination' }).vm.$emit('size-change', 20)
+    await wrapper.vm.$nextTick()
     expect(wrapper.emitted('update:pageSize')?.[0]).toEqual([20])
     expect(wrapper.text()).toContain('42')
   })
@@ -230,7 +234,7 @@ describe('AppNav', () => {
 
   it('用户菜单可展开，退出登录跳转登录页', async () => {
     const { wrapper, router } = await mountWithRouter(AppNav)
-    await wrapper.find('.nav__user button').trigger('click')
+    await wrapper.find('.nav__avatar-btn').trigger('click')
     const items = wrapper.findAll('.nav__menu-item')
     expect(items).toHaveLength(2)
     await items[1]!.trigger('click')
@@ -240,8 +244,9 @@ describe('AppNav', () => {
 
   it('全局搜索把关键词带到检索页', async () => {
     const { wrapper, router } = await mountWithRouter(AppNav)
-    await wrapper.find('.nav__search-input').setValue(' 资金补贴 ')
-    await wrapper.find('.nav__search').trigger('submit')
+    const input = wrapper.find('.nav__search input')
+    await input.setValue(' 资金补贴 ')
+    await input.trigger('keyup.enter')
     await flushPromises()
     expect(router.currentRoute.value.name).toBe('search')
     expect(router.currentRoute.value.query.q).toBe('资金补贴')

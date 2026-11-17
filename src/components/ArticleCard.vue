@@ -1,13 +1,11 @@
 <!--
-  公告卡片（公共组件）。
+  公告卡片（Element Plus 版）。
   规范 2.2.1（四）2：公告卡片、要素标签、空状态、加载骨架等要抽成公共组件，支持 Props 与 Events。
-  规范 2.2.1（二）模块三（3）：标题最多 2 行超出省略、分类标签、发布时间、来源网站、
-  相关度评分（0-100，绿≥80 / 黄≥60 / 红<60）、关键要素摘要（仅高相关度显示）。
-  搜索页与分类页原先各写一份结构完全相同的卡片，改一处要改两遍，这里统一。
 -->
 <script setup lang="ts">
 import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
+import { ArrowRight } from '@element-plus/icons-vue'
 import ScoreBadge from './ScoreBadge.vue'
 import SearchHighlight from './SearchHighlight.vue'
 import { formatDate, scoreLevel, scoreToPercent } from '@/utils/format'
@@ -68,15 +66,17 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <article class="card">
+  <el-card class="card" shadow="hover">
     <RouterLink
       :to="{ name: 'article', params: { id: articleId } }"
       class="card__link"
       @click="emit('click', articleId)"
     >
       <div class="card__head">
-        <span v-if="category" class="card__tag">{{ categoryName(category) }}</span>
-        <span v-if="industryName" class="card__tag card__tag--industry">{{ industryName }}</span>
+        <el-tag v-if="category" size="small" effect="light">{{ categoryName(category) }}</el-tag>
+        <el-tag v-if="industryName" size="small" type="info" effect="plain">
+          {{ industryName }}
+        </el-tag>
         <span class="card__source">来源：{{ sourceName(source) }}</span>
         <span class="card__date">{{ formatDate(publishedAt) }}</span>
         <ScoreBadge v-if="percent !== null" :score="score ?? null" class="card__score" />
@@ -91,14 +91,19 @@ const emit = defineEmits<{
       </p>
 
       <ul v-if="showHighlights" class="card__highlights">
-        <li v-for="item in highlights" :key="item" class="card__highlight">{{ item }}</li>
+        <li v-for="item in highlights" :key="item" class="card__highlight">
+          <el-tag size="small" type="success" effect="light">{{ item }}</el-tag>
+        </li>
       </ul>
 
       <p v-if="matchedTerms.length" class="card__terms">命中：{{ matchedTerms.join(' / ') }}</p>
 
-      <span v-if="showMore" class="card__more">查看详情 →</span>
+      <span v-if="showMore" class="card__more">
+        查看详情
+        <el-icon><ArrowRight /></el-icon>
+      </span>
     </RouterLink>
-  </article>
+  </el-card>
 </template>
 
 <style scoped>
@@ -108,8 +113,7 @@ const emit = defineEmits<{
   background: var(--color-bg);
   transition:
     box-shadow var(--duration-base) var(--ease-out),
-    border-color var(--duration-base) var(--ease-out),
-    transform var(--duration-base) var(--ease-out);
+    border-color var(--duration-base) var(--ease-out);
 }
 
 .card:hover {
@@ -117,8 +121,8 @@ const emit = defineEmits<{
   box-shadow: var(--shadow-card-hover);
 }
 
-.card:active {
-  border-color: var(--color-primary-active);
+.card :deep(.el-card__body) {
+  padding: 0;
 }
 
 .card__link {
@@ -142,19 +146,6 @@ const emit = defineEmits<{
   margin-bottom: var(--space-2);
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
-}
-
-.card__tag {
-  padding: 1px var(--space-2);
-  border-radius: var(--radius-tag);
-  background: var(--color-primary-bg);
-  color: var(--color-primary);
-  font-size: var(--font-size-xs);
-}
-
-.card__tag--industry {
-  background: var(--color-bg-layout);
-  color: var(--color-text-secondary);
 }
 
 .card__score {
@@ -206,14 +197,6 @@ const emit = defineEmits<{
   list-style: none;
 }
 
-.card__highlight {
-  padding: 1px var(--space-2);
-  border-radius: var(--radius-base);
-  background: var(--color-success-bg);
-  color: var(--color-success);
-  font-size: var(--font-size-xs);
-}
-
 .card__terms {
   margin: 0 0 var(--space-1);
   color: var(--color-text-muted);
@@ -221,6 +204,9 @@ const emit = defineEmits<{
 }
 
 .card__more {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
   color: var(--color-primary);
   font-size: var(--font-size-xs);
 }

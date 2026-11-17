@@ -136,11 +136,11 @@ describe('时间范围：自定义（B3 回归）', () => {
   it('点「自定义」立刻出现两个日期输入框', async () => {
     const { wrapper, router } = await mountAt('/search')
 
-    expect(wrapper.findAll('input[type="date"]')).toHaveLength(0)
+    expect(wrapper.findAllComponents({ name: 'ElDatePicker' })).toHaveLength(0)
     await buttonByText(wrapper, '自定义')!.trigger('click')
     await settle()
 
-    expect(wrapper.findAll('input[type="date"]')).toHaveLength(2)
+    expect(wrapper.findAllComponents({ name: 'ElDatePicker' })).toHaveLength(2)
     // 关键：range 必须写进 URL，否则任何一次 applyFromRoute 都会把它还原成「全部时间」
     expect(router.currentRoute.value.query.range).toBe('custom')
   })
@@ -154,7 +154,7 @@ describe('时间范围：自定义（B3 回归）', () => {
 
     // 用同一个 URL 重新挂载，模拟刷新
     const { wrapper } = await mountAt(url)
-    expect(wrapper.findAll('input[type="date"]')).toHaveLength(2)
+    expect(wrapper.findAllComponents({ name: 'ElDatePicker' })).toHaveLength(2)
   })
 
   it('从「近 7 天」切到「自定义」会清掉日期条件，但不弹回「全部时间」', async () => {
@@ -167,7 +167,7 @@ describe('时间范围：自定义（B3 回归）', () => {
     await settle()
     expect(router.currentRoute.value.query.range).toBe('custom')
     expect(router.currentRoute.value.query.from).toBeUndefined()
-    expect(wrapper.findAll('input[type="date"]')).toHaveLength(2)
+    expect(wrapper.findAllComponents({ name: 'ElDatePicker' })).toHaveLength(2)
   })
 })
 

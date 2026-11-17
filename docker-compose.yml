@@ -1,0 +1,26 @@
+services:
+  web:
+    build:
+      context: .
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
+    image: insight-web:local
+    container_name: insight-web
+    restart: unless-stopped
+    ports:
+      - "${WEB_HTTP_PORT:-80}:80"
+      - "${WEB_HTTPS_PORT:-443}:443"
+    environment:
+      SERVER_NAME: ${SERVER_NAME:-localhost}
+      # 由 Nginx 反代注入，前端产物里不出现密钥
+      INSIGHT_API_KEY: ${INSIGHT_API_KEY:-}
+    # 生产环境把正式证书放进 ./deploy/certs 后取消注释；默认使用镜像内自签证书
+    # volumes:
+    #   - ./deploy/certs:/etc/nginx/certs:ro
+    networks:
+      - insight
+
+networks:
+  insight:
+    external: true
+    name: ${INSIGHT_NETWORK:-news-insight_default}

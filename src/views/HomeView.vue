@@ -14,8 +14,9 @@
  * 最新 100 篇在本地统计（卡片 hint 已注明口径）；待办与推荐分别来自 GET /v1/todos
  * 和 GET /v1/recommendations，由后端按截止时间与画像/内容质量排序。
  */
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, markRaw, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { Document, FolderOpened, Search, User } from '@element-plus/icons-vue'
 import { categoryStats, listCategories } from '@/api/category'
 import { listArticles, type ArticleListItem } from '@/api/articles'
 import {
@@ -192,15 +193,30 @@ const cards = computed(() => [
 ])
 
 const quickLinks = [
-  { label: '分类浏览', desc: '按 6 大类查看全部公告', to: { name: 'category' }, icon: '📁' },
-  { label: '关键词检索', desc: '输入关键词按相关度排序', to: { name: 'search' }, icon: '🔍' },
+  {
+    label: '分类浏览',
+    desc: '按 6 大类查看全部公告',
+    to: { name: 'category' },
+    icon: markRaw(FolderOpened),
+  },
+  {
+    label: '关键词检索',
+    desc: '输入关键词按相关度排序',
+    to: { name: 'search' },
+    icon: markRaw(Search),
+  },
   {
     label: '申报清单生成',
     desc: '查看项目申报公告并生成准备清单',
     to: { name: 'category', query: { cat: 'project_application' } },
-    icon: '📋',
+    icon: markRaw(Document),
   },
-  { label: '个人中心', desc: '收藏、历史与个性化设置', to: { name: 'profile' }, icon: '👤' },
+  {
+    label: '个人中心',
+    desc: '收藏、历史与个性化设置',
+    to: { name: 'profile' },
+    icon: markRaw(User),
+  },
 ]
 
 function openArticle(id: string): void {
@@ -222,18 +238,20 @@ function openArticle(id: string): void {
       </div>
     </header>
 
-    <p v-if="error" class="home__error" role="alert">{{ error }}</p>
+    <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" />
 
     <!-- 数据概览卡片（规范模块二（2）） -->
     <ul class="cards">
       <li v-for="card in cards" :key="card.key" class="cards__item">
         <RouterLink :to="card.to" class="cards__link">
-          <span class="cards__label">{{ card.label }}</span>
-          <span class="cards__value num">
-            {{ card.value === null ? '—' : card.value }}
-            <small class="cards__unit">{{ card.unit }}</small>
-          </span>
-          <span class="cards__hint">{{ card.hint }}</span>
+          <el-card shadow="hover" class="cards__card">
+            <span class="cards__label">{{ card.label }}</span>
+            <span class="cards__value">
+              <el-statistic :value="card.value ?? 0" />
+              <small class="cards__unit">{{ card.unit }}</small>
+            </span>
+            <span class="cards__hint">{{ card.hint }}</span>
+          </el-card>
         </RouterLink>
       </li>
     </ul>
@@ -241,26 +259,35 @@ function openArticle(id: string): void {
     <!-- 待办明细：解释第三张统计卡的数字来自哪里 -->
     <section v-if="todos.length" class="todo">
       <h2 class="todo__title">近期申报截止</h2>
-      <ul class="todo__list">
-        <li v-for="item in todos" :key="item.article_id" class="todo__item">
-          <RouterLink :to="{ name: 'article', params: { id: item.article_id } }" class="todo__link">
-            <span class="todo__name">{{ item.title }}</span>
-            <span class="todo__meta">
-              <span class="todo__date num">{{ item.deadline }}</span>
-              <span class="todo__days" :class="{ 'todo__days--soon': item.days_left <= 3 }">
-                {{ item.days_left === 0 ? '今天截止' : `剩 ${item.days_left} 天` }}
+      <el-card shadow="never">
+        <ul class="todo__list">
+          <li v-for="item in todos" :key="item.article_id" class="todo__item">
+            <RouterLink
+              :to="{ name: 'article', params: { id: item.article_id } }"
+              class="todo__link"
+            >
+              <span class="todo__name">{{ item.title }}</span>
+              <span class="todo__meta">
+                <span class="todo__date num">{{ item.deadline }}</span>
+                <el-tag
+                  size="small"
+                  :type="item.days_left <= 3 ? 'warning' : 'success'"
+                  effect="light"
+                >
+                  {{ item.days_left === 0 ? '今天截止' : `剩 ${item.days_left} 天` }}
+                </el-tag>
               </span>
-            </span>
-          </RouterLink>
-        </li>
-      </ul>
+            </RouterLink>
+          </li>
+        </ul>
+      </el-card>
     </section>
 
     <!-- 快捷入口（规范模块二（3）） -->
     <ul class="quick">
       <li v-for="link in quickLinks" :key="link.label" class="quick__item">
         <RouterLink :to="link.to" class="quick__link">
-          <span class="quick__icon" aria-hidden="true">{{ link.icon }}</span>
+          <el-icon class="quick__icon"><component :is="link.icon" /></el-icon>
           <span class="quick__text">
             <span class="quick__label">{{ link.label }}</span>
             <span class="quick__desc">{{ link.desc }}</span>
@@ -283,14 +310,16 @@ function openArticle(id: string): void {
 
       <ul v-else-if="recommendations.length" class="rec__list">
         <li v-for="item in recommendations" :key="item.article_id" class="rec__item">
-          <button class="rec__link" type="button" @click="openArticle(item.article_id)">
-            <span class="rec__tag">{{ categoryName(item.category ?? '') }}</span>
-            <span class="rec__item-title">{{ item.title }}</span>
-            <span class="rec__meta">
-              <span class="rec__time">{{ formatRelativeTime(item.published_at) }}</span>
-              <ScoreBadge :score="item.relevance_score ?? null" label="相关度" />
-            </span>
-          </button>
+          <el-card shadow="hover" class="rec__card">
+            <el-button class="rec__link" text @click="openArticle(item.article_id)">
+              <el-tag size="small" effect="light">{{ categoryName(item.category ?? '') }}</el-tag>
+              <span class="rec__item-title">{{ item.title }}</span>
+              <span class="rec__meta">
+                <span class="rec__time">{{ formatRelativeTime(item.published_at) }}</span>
+                <ScoreBadge :score="item.relevance_score ?? null" label="相关度" />
+              </span>
+            </el-button>
+          </el-card>
         </li>
       </ul>
 
@@ -302,19 +331,21 @@ function openArticle(id: string): void {
       />
     </section>
 
-    <!-- 分类分布（辅助信息，不是规范要求，但首页没有数据分布会显得空 -->
+    <!-- 分类分布（辅助信息，不是规范要求，但首页没有数据分布会显得空） -->
     <section v-if="categoryCounts.length" class="dist">
       <h2 class="dist__title">公告分类分布</h2>
       <ul class="dist__list">
         <li v-for="item in categoryCounts" :key="item.id" class="dist__item">
           <RouterLink :to="{ name: 'search', query: { category: item.id } }" class="dist__link">
             <span class="dist__name">{{ item.name }}</span>
-            <span class="dist__bar">
-              <span
-                class="dist__fill"
-                :style="{ width: totalArticles ? (item.count / totalArticles) * 100 + '%' : '0%' }"
-              />
-            </span>
+            <el-progress
+              class="dist__bar"
+              :percentage="
+                totalArticles ? Math.min(100, Math.round((item.count / totalArticles) * 100)) : 0
+              "
+              :show-text="false"
+              :stroke-width="8"
+            />
             <span class="dist__count num">{{ item.count }}</span>
           </RouterLink>
         </li>

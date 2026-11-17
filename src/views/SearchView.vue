@@ -20,6 +20,7 @@
  */
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ArrowDown } from '@element-plus/icons-vue'
 import AppPager from '@/components/AppPager.vue'
 import ArticleCard from '@/components/ArticleCard.vue'
 import EmptyState from '@/components/EmptyState.vue'
@@ -839,11 +840,10 @@ onMounted(() => {
     <form class="searchbox" role="search" @submit.prevent="submit">
       <div class="searchbox__field">
         <label class="visually-hidden" for="search-input">搜索关键词</label>
-        <input
+        <el-input
           id="search-input"
           v-model="keyword"
           class="searchbox__input"
-          type="search"
           maxlength="100"
           placeholder="如：项目申报、资金补贴、专精特新"
           autocomplete="off"
@@ -878,89 +878,80 @@ onMounted(() => {
           </li>
         </ul>
       </div>
-      <button class="btn btn--primary" type="submit" :disabled="loading">检索</button>
-      <button v-if="submitted" class="btn btn--ghost" type="button" @click="clear">清除</button>
+      <el-button type="primary" native-type="submit" :loading="loading">检索</el-button>
+      <el-button v-if="submitted" @click="clear">清除</el-button>
     </form>
 
     <div class="filters">
       <span class="filters__label">分类筛选</span>
-      <button
+      <el-button
         v-for="id in CATEGORY_ORDER"
         :key="id"
-        class="chip"
-        :class="{ 'chip--active': selectedCategories.includes(id) }"
-        type="button"
+        size="small"
+        round
+        :type="selectedCategories.includes(id) ? 'primary' : 'default'"
         :aria-pressed="selectedCategories.includes(id)"
         @click="toggleCategory(id)"
       >
         {{ categoryName(id) }}
-      </button>
-      <button
-        v-if="selectedCategories.length"
-        class="btn btn--text"
-        type="button"
-        @click="clearCategory"
-      >
+      </el-button>
+      <el-button v-if="selectedCategories.length" link type="primary" @click="clearCategory">
         清除分类
-      </button>
+      </el-button>
     </div>
     <p v-if="categoryHint" class="cat-hint" role="status">{{ categoryHint }}</p>
 
     <div class="adv">
-      <button
+      <el-button
+        link
+        type="primary"
         class="adv__toggle"
-        type="button"
         :aria-expanded="advOpen"
         aria-controls="adv-panel"
         @click="advOpen = !advOpen"
       >
-        <svg class="adv__chevron" viewBox="0 0 16 16" aria-hidden="true">
-          <path
-            d="M4 6l4 4 4-4"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.6"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-        </svg>
+        <el-icon class="adv__chevron" :class="{ 'adv__chevron--open': advOpen }">
+          <ArrowDown />
+        </el-icon>
         高级搜索
-        <span v-if="activeFilterCount" class="adv__count">{{ activeFilterCount }}</span>
-      </button>
+        <el-badge v-if="activeFilterCount" :value="activeFilterCount" class="adv__count" />
+      </el-button>
       <span v-if="filterSummary" class="adv__summary">{{ filterSummary }}</span>
-      <button v-if="activeFilterCount" class="btn btn--text" type="button" @click="resetFilters">
+      <el-button v-if="activeFilterCount" link type="primary" @click="resetFilters">
         重置筛选
-      </button>
+      </el-button>
     </div>
 
     <div v-show="advOpen" id="adv-panel" class="adv-panel">
       <div class="adv-row">
         <span class="adv-row__label">时间范围</span>
         <div class="adv-row__body">
-          <button
+          <el-button
             v-for="item in TIME_RANGES"
             :key="item.value"
-            class="chip"
-            :class="{ 'chip--active': timeRange === item.value }"
-            type="button"
+            size="small"
+            round
+            :type="timeRange === item.value ? 'primary' : 'default'"
             :aria-pressed="timeRange === item.value"
             @click="setTimeRange(item.value)"
           >
             {{ item.label }}
-          </button>
+          </el-button>
           <template v-if="timeRange === 'custom'">
-            <input
+            <el-date-picker
               v-model="customFrom"
-              class="adv-date"
               type="date"
+              value-format="YYYY-MM-DD"
+              placeholder="开始日期"
               aria-label="开始日期"
               @change="onCustomDateChange"
             />
             <span class="adv-row__sep">至</span>
-            <input
+            <el-date-picker
               v-model="customTo"
-              class="adv-date"
               type="date"
+              value-format="YYYY-MM-DD"
+              placeholder="结束日期"
               aria-label="结束日期"
               @change="onCustomDateChange"
             />
@@ -974,18 +965,18 @@ onMounted(() => {
       <div class="adv-row">
         <span class="adv-row__label">发布单位</span>
         <div class="adv-row__body">
-          <button
+          <el-button
             v-for="item in sources"
             :key="item.source"
-            class="chip"
-            :class="{ 'chip--active': selectedSources.includes(item.source) }"
-            type="button"
+            size="small"
+            round
+            :type="selectedSources.includes(item.source) ? 'primary' : 'default'"
             :aria-pressed="selectedSources.includes(item.source)"
             @click="toggleSource(item.source)"
           >
             {{ sourceName(item.source) }}
             <span class="chip__count">{{ item.count }}</span>
-          </button>
+          </el-button>
           <span v-if="!sources.length" class="adv-hint">暂无可选来源</span>
         </div>
       </div>
@@ -993,19 +984,19 @@ onMounted(() => {
       <div class="adv-row">
         <span class="adv-row__label">行业领域</span>
         <div class="adv-row__body">
-          <button
+          <el-button
             v-for="item in industries"
             :key="item.id"
-            class="chip"
-            :class="{ 'chip--active': selectedIndustry === item.id }"
-            type="button"
+            size="small"
+            round
+            :type="selectedIndustry === item.id ? 'primary' : 'default'"
             :aria-pressed="selectedIndustry === item.id"
             :title="item.description"
             @click="toggleIndustry(item.id)"
           >
             {{ item.name }}
             <span class="chip__count">{{ item.article_count }}</span>
-          </button>
+          </el-button>
           <span v-if="!industries.length" class="adv-hint">暂无可选行业</span>
         </div>
       </div>
@@ -1013,33 +1004,27 @@ onMounted(() => {
       <div class="adv-row">
         <span class="adv-row__label">排序方式</span>
         <div class="adv-row__body">
-          <button
+          <el-button
             v-for="item in SORT_OPTIONS"
             :key="item.value"
-            class="chip"
-            :class="{ 'chip--active': effectiveSort === item.value }"
-            type="button"
+            size="small"
+            round
+            :type="effectiveSort === item.value ? 'primary' : 'default'"
             :aria-pressed="effectiveSort === item.value"
             :disabled="browseCategory !== '' && item.value === 'relevance'"
             @click="setSort(item.value)"
           >
             {{ item.label }}
-          </button>
+          </el-button>
         </div>
       </div>
 
       <div class="adv-row">
         <span class="adv-row__label">相关度</span>
         <div class="adv-row__body">
-          <label class="check">
-            <input
-              v-model="highRelevanceOnly"
-              type="checkbox"
-              :disabled="!submitted"
-              @change="onHighChange"
-            />
+          <el-checkbox v-model="highRelevanceOnly" :disabled="!submitted" @change="onHighChange">
             仅看高相关度（文章相关度 ≥80 分）
-          </label>
+          </el-checkbox>
           <span v-if="!submitted" class="adv-hint">输入关键词后可用</span>
         </div>
       </div>
@@ -1047,29 +1032,29 @@ onMounted(() => {
 
     <div v-if="searchHistory.length" class="history">
       <span class="history__label">历史搜索</span>
-      <button
+      <el-button
         v-for="word in searchHistory"
         :key="word"
-        class="chip"
-        type="button"
+        size="small"
+        round
         @click="searchHot(word)"
       >
         {{ word }}
-      </button>
-      <button class="btn btn--text" type="button" @click="clearHistory">清空历史</button>
+      </el-button>
+      <el-button link type="primary" @click="clearHistory">清空历史</el-button>
     </div>
 
     <div class="hot">
       <span class="hot__label">热门搜索</span>
-      <button
+      <el-button
         v-for="word in HOT_KEYWORDS"
         :key="word"
-        class="chip"
-        type="button"
+        size="small"
+        round
         @click="searchHot(word)"
       >
         {{ word }}
-      </button>
+      </el-button>
     </div>
 
     <p class="status" role="status">{{ statusText }}</p>
@@ -1078,7 +1063,7 @@ onMounted(() => {
 
     <EmptyState v-else-if="error" variant="error" title="检索失败" :description="error">
       <template #action>
-        <button class="btn btn--primary" type="button" @click="run">重试</button>
+        <el-button type="primary" @click="run">重试</el-button>
       </template>
     </EmptyState>
 
@@ -1091,9 +1076,7 @@ onMounted(() => {
       }。`"
     >
       <template #action>
-        <button v-if="activeFilterCount" class="btn btn--ghost" type="button" @click="resetFilters">
-          重置筛选
-        </button>
+        <el-button v-if="activeFilterCount" @click="resetFilters">重置筛选</el-button>
       </template>
     </EmptyState>
 

@@ -1,0 +1,38 @@
+/**
+ * Element Plus 主题桥接：把设计令牌映射到 Element Plus 的 CSS 变量，
+ * 保证组件库默认样式与规范书色板/圆角/字号一致。
+ */
+:root {
+  --el-color-primary: var(--color-primary);
+  --el-color-primary-light-3: var(--color-primary-hover);
+  --el-color-primary-light-5: var(--color-primary-light);
+  --el-color-primary-light-7: var(--color-primary-bg-hover);
+  --el-color-primary-light-8: var(--color-primary-bg);
+  --el-color-primary-light-9: var(--color-primary-bg);
+  --el-color-primary-dark-2: var(--color-primary-active);
+  --el-color-success: var(--color-success);
+  --el-color-success-light-9: var(--color-success-bg);
+  --el-color-warning: var(--color-warning);
+  --el-color-warning-light-9: var(--color-warning-bg);
+  --el-color-danger: var(--color-error);
+  --el-color-error: var(--color-error);
+  --el-color-danger-light-9: var(--color-error-bg);
+  --el-text-color-primary: var(--color-text);
+  --el-text-color-regular: var(--color-text-secondary);
+  --el-text-color-secondary: var(--color-text-muted);
+  --el-text-color-placeholder: var(--color-text-disabled);
+  --el-border-color: var(--color-border);
+  --el-border-color-light: var(--color-split);
+  --el-border-color-lighter: var(--color-split);
+  --el-fill-color-blank: var(--color-bg);
+  --el-fill-color-light: var(--color-bg-hover);
+  --el-bg-color-page: var(--color-bg-layout);
+  --el-border-radius-base: var(--radius-base);
+  --el-border-radius-small: var(--radius-base);
+  --el-border-radius-round: var(--radius-pill);
+  --el-font-family: var(--font-family-base);
+  --el-font-size-base: var(--font-size-body);
+  --el-font-size-small: var(--font-size-sm);
+  --el-font-size-extra-small: var(--font-size-xs);
+  --el-box-shadow-light: var(--shadow-card);
+}

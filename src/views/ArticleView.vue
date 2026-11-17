@@ -23,9 +23,10 @@
  * - 「相关推荐 3-5 条」：调 /v1/articles?category=X 排除自身取 5 条同分类最新公告，
  *   属同分类近似，不是相似度推荐（后端没有相似度接口）。取不到时整块不渲染。
  */
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import MarkdownIt from 'markdown-it'
+import { Star, StarFilled } from '@element-plus/icons-vue'
 import EmptyState from '@/components/EmptyState.vue'
 import ArticleCard from '@/components/ArticleCard.vue'
 import ScoreBadge from '@/components/ScoreBadge.vue'
@@ -260,13 +261,7 @@ async function generateChecklistAction(force = false): Promise<void> {
   }
 }
 
-/** Esc 关闭弹窗：规范要求三态交互完整，弹窗不能只靠点 ✕ 才能关 */
-function onKeydown(event: KeyboardEvent): void {
-  if (event.key === 'Escape' && checklistOpen.value) checklistOpen.value = false
-}
-
-onMounted(() => window.addEventListener('keydown', onKeydown))
-onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
+/** Esc 关闭弹窗由 el-dialog 自带，不再需要手写键盘监听 */
 
 function downloadChecklist(): void {
   const items = checklist.value?.items ?? []
@@ -370,9 +365,7 @@ watch(
 
     <EmptyState v-else-if="error" variant="error" title="公告加载失败" :description="error">
       <template #action>
-        <button class="btn btn--primary" type="button" @click="load(String(route.params.id))">
-          重新加载
-        </button>
+        <el-button type="primary" @click="load(String(route.params.id))">重新加载</el-button>
       </template>
     </EmptyState>
 
@@ -382,10 +375,9 @@ watch(
         <div class="head__meta">
           <RouterLink
             v-if="article.category"
-            class="tag tag--category"
             :to="{ name: 'search', query: { category: article.category } }"
           >
-            {{ categoryName(article.category) }}
+            <el-tag effect="light">{{ categoryName(article.category) }}</el-tag>
           </RouterLink>
           <span>{{ sourceName(article.source) }}</span>
           <span>{{ formatDateTime(article.published_at) }}</span>
@@ -396,91 +388,70 @@ watch(
           <ScoreBadge :score="article.category_confidence" label="分类置信度" />
         </div>
         <div class="head__actions">
-          <button
+          <el-button
             class="btn"
-            :class="favorited ? 'btn--primary' : 'btn--ghost'"
-            type="button"
+            :type="favorited ? 'primary' : 'default'"
+            :loading="favoriteLoading"
             :aria-pressed="favorited"
-            :disabled="favoriteLoading"
             @click="toggleFavorite"
           >
-            <svg viewBox="0 0 16 16" aria-hidden="true" class="btn__icon">
-              <path
-                d="M8 2.5l1.7 3.4 3.8.6-2.7 2.6.6 3.7L8 11l-3.4 1.8.6-3.7L2.5 6.5l3.8-.6z"
-                :fill="favorited ? 'currentColor' : 'none'"
-                stroke="currentColor"
-                stroke-width="1.2"
-                stroke-linejoin="round"
-              />
-            </svg>
-            {{ favoriteLoading ? '处理中…' : favorited ? '已收藏' : '收藏' }}
-          </button>
-          <a class="btn btn--ghost" :href="article.url" target="_blank" rel="noopener noreferrer">
+            <el-icon><StarFilled v-if="favorited" /><Star v-else /></el-icon>
+            {{ favorited ? '已收藏' : '收藏' }}
+          </el-button>
+          <el-button tag="a" :href="article.url" target="_blank" rel="noopener noreferrer">
             查看原文 ↗
-          </a>
+          </el-button>
         </div>
         <p v-if="favoriteError" class="card__error" role="alert">{{ favoriteError }}</p>
       </header>
 
-      <section v-if="relevanceSummary" class="card relevance">
-        <h2 class="card__title">AI 要素摘要</h2>
+      <el-card v-if="relevanceSummary" class="card" shadow="never">
+        <template #header><span class="card__title">AI 要素摘要</span></template>
         <p class="relevance__text">{{ relevanceSummary }}</p>
         <p class="card__note">由模型根据正文生成，仅高相关公告展示，请以原文为准。</p>
-      </section>
+      </el-card>
 
-      <section v-if="fields.length" class="card">
-        <h2 class="card__title">关键信息</h2>
-        <dl class="fields">
-          <div v-for="field in fields" :key="field.key" class="field">
-            <dt class="field__label">{{ field.label }}</dt>
-            <dd class="field__value">
+      <el-card v-if="fields.length" class="card" shadow="never">
+        <template #header><span class="card__title">关键信息</span></template>
+        <el-descriptions class="fields" :column="2" border>
+          <el-descriptions-item v-for="field in fields" :key="field.key" :label="field.label">
+            <span class="field__value" :class="{ field__empty: !field.value }">
               <template v-if="field.value">
                 {{ field.value }}
-                <span
-                  class="field__badge"
-                  :class="field.verified ? 'field__badge--ok' : 'field__badge--warn'"
-                >
+                <el-tag size="small" :type="field.verified ? 'success' : 'warning'" effect="light">
                   {{ field.verified ? '已核验' : '待核验' }}
-                  <span class="num">{{ scoreToPercent(field.confidence) }}%</span>
-                </span>
+                  {{ scoreToPercent(field.confidence) }}%
+                </el-tag>
               </template>
-              <span v-else class="field__empty">未提取到</span>
-            </dd>
-          </div>
-        </dl>
+              <template v-else>未提取到</template>
+            </span>
+          </el-descriptions-item>
+        </el-descriptions>
         <p class="card__note">以上字段由模型从正文中抽取，标「待核验」的请以原文为准。</p>
-      </section>
+      </el-card>
 
-      <section v-if="checklist?.items.length || isProjectArticle" class="card">
-        <div class="card__head">
-          <h2 class="card__title card__title--inline">申报准备清单</h2>
-          <div v-if="checklist?.items.length" class="card__actions">
-            <button class="btn btn--ghost" type="button" @click="checklistOpen = true">
-              弹窗查看
-            </button>
-            <button
-              class="btn btn--ghost"
-              type="button"
-              :disabled="checklistLoading"
-              @click="generateChecklistAction(true)"
-            >
-              {{ checklistLoading ? '生成中…' : '重新生成' }}
-            </button>
-            <button class="btn btn--primary" type="button" @click="downloadChecklist">
-              下载清单
-            </button>
+      <el-card v-if="checklist?.items.length || isProjectArticle" class="card" shadow="never">
+        <template #header>
+          <div class="card__head">
+            <span class="card__title">申报准备清单</span>
+            <div v-if="checklist?.items.length" class="card__actions">
+              <el-button @click="checklistOpen = true">弹窗查看</el-button>
+              <el-button :loading="checklistLoading" @click="generateChecklistAction(true)">
+                重新生成
+              </el-button>
+              <el-button type="primary" @click="downloadChecklist">下载清单</el-button>
+            </div>
+            <div v-else-if="canGenerateChecklist" class="card__actions">
+              <el-button
+                type="primary"
+                :loading="checklistLoading"
+                @click="generateChecklistAction(false)"
+              >
+                {{ checklistLoading ? '生成中…' : '生成申报清单' }}
+              </el-button>
+            </div>
           </div>
-          <div v-else-if="canGenerateChecklist" class="card__actions">
-            <button
-              class="btn btn--primary"
-              type="button"
-              :disabled="checklistLoading"
-              @click="generateChecklistAction(false)"
-            >
-              {{ checklistLoading ? '生成中…' : '生成申报清单' }}
-            </button>
-          </div>
-        </div>
+        </template>
         <p v-if="checklistError" class="card__error" role="alert">{{ checklistError }}</p>
         <template v-if="checklist?.items.length">
           <ol class="checklist">
@@ -504,32 +475,38 @@ watch(
         <p v-else class="card__note">
           该公告命中申报类但未抽取到可用的申报要素，暂无法生成清单，请查看原文核对。
         </p>
-      </section>
+      </el-card>
 
-      <section v-if="article.tags.length" class="card">
-        <h2 class="card__title">相关标签</h2>
-        <ul class="tags">
-          <li v-for="item in article.tags" :key="item.tag" class="tag" :title="item.evidence ?? ''">
+      <el-card v-if="article.tags.length" class="card" shadow="never">
+        <template #header><span class="card__title">相关标签</span></template>
+        <div class="tags">
+          <el-tag
+            v-for="item in article.tags"
+            :key="item.tag"
+            :title="item.evidence ?? ''"
+            effect="light"
+          >
             {{ tagLabel(item.tag) }}
             <span class="tag__score num">{{ tagPercent(item.confidence) }}%</span>
-          </li>
-        </ul>
-      </section>
+          </el-tag>
+        </div>
+      </el-card>
 
-      <section class="card">
-        <h2 class="card__title">正文</h2>
+      <el-card class="card" shadow="never">
+        <template #header><span class="card__title">正文</span></template>
         <nav v-if="toc.length > 1" class="toc" aria-label="正文目录">
           <span class="toc__label">目录</span>
-          <button
+          <el-button
             v-for="item in toc"
             :key="item.id"
+            link
+            type="primary"
             class="toc__item"
             :class="{ 'toc__item--sub': item.level === 3 }"
-            type="button"
             @click="jumpToSection(item.id)"
           >
             {{ item.text }}
-          </button>
+          </el-button>
         </nav>
         <!-- body_html 已由后端白名单清洗；纯文本回退经 MarkdownIt(html:false) 转义 -->
         <!-- eslint-disable-next-line vue/no-v-html -- 内容来自 news-crawler html_sanitize 白名单，非用户输入 -->
@@ -537,7 +514,7 @@ watch(
         <p v-if="!bodyHtml.trim()" class="body__empty">
           这篇公告没有落库正文，请点右上角「查看原文」。
         </p>
-      </section>
+      </el-card>
 
       <!-- 规范模块四（6）：底部相关公告 3-5 条。后端只有大类，所以是同分类近似 -->
       <section v-if="related.length" class="related">
@@ -561,47 +538,47 @@ watch(
     </template>
 
     <!-- 规范模块四（7）：申报清单弹窗 -->
-    <div
-      v-if="checklistOpen && checklist"
-      class="modal"
-      role="dialog"
-      aria-modal="true"
-      aria-label="申报准备清单"
-      @click.self="checklistOpen = false"
+    <el-dialog
+      v-if="checklistOpen"
+      v-model="checklistOpen"
+      title="申报准备清单"
+      width="720px"
+      align-center
+      class="checklist-dialog"
+      :teleported="false"
+      :show-close="false"
     >
-      <div class="modal__panel">
-        <header class="modal__head">
-          <h2 class="modal__title">申报准备清单</h2>
+      <template #header>
+        <div class="modal__head">
+          <span class="modal__title">申报准备清单</span>
           <button
-            class="modal__close"
             type="button"
+            class="modal__close"
             aria-label="关闭"
             @click="checklistOpen = false"
           >
-            ✕
+            ×
           </button>
-        </header>
-        <p class="modal__sub">{{ article?.title }}</p>
-        <ol class="checklist modal__body">
-          <li v-for="(item, index) in checklist.items" :key="index" class="checklist__item">
-            <span class="checklist__index num">{{ index + 1 }}</span>
-            <div class="checklist__body">
-              <p class="checklist__text">{{ item.text }}</p>
-              <p v-if="item.source_text" class="checklist__source">依据：{{ item.source_text }}</p>
-              <span class="checklist__basis" :class="`checklist__basis--${item.basis}`">
-                {{ item.basis === 'excerpt' ? '原文依据' : '建议步骤' }}
-              </span>
-            </div>
-          </li>
-        </ol>
-        <footer class="modal__foot">
-          <button class="btn btn--ghost" type="button" @click="checklistOpen = false">关闭</button>
-          <button class="btn btn--primary" type="button" @click="downloadChecklist">
-            下载清单
-          </button>
-        </footer>
-      </div>
-    </div>
+        </div>
+      </template>
+      <p class="modal__sub">{{ article?.title }}</p>
+      <ol v-if="checklist" class="checklist modal__body">
+        <li v-for="(item, index) in checklist.items" :key="index" class="checklist__item">
+          <span class="checklist__index num">{{ index + 1 }}</span>
+          <div class="checklist__body">
+            <p class="checklist__text">{{ item.text }}</p>
+            <p v-if="item.source_text" class="checklist__source">依据：{{ item.source_text }}</p>
+            <span class="checklist__basis" :class="`checklist__basis--${item.basis}`">
+              {{ item.basis === 'excerpt' ? '原文依据' : '建议步骤' }}
+            </span>
+          </div>
+        </li>
+      </ol>
+      <template #footer>
+        <el-button @click="checklistOpen = false">关闭</el-button>
+        <el-button type="primary" @click="downloadChecklist">下载清单</el-button>
+      </template>
+    </el-dialog>
   </section>
 </template>
 

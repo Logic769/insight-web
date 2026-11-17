@@ -8,7 +8,8 @@
  * （4）个性化设置：关注领域、消息推送开关、推送时间偏好，保存到 /v1/me/preferences
  * （5）修改密码：验证原密码，新密码满足大小写+数字+特殊字符且 ≥8 位（后端 /v1/auth/password）
  */
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import { categoryName } from '@/constants/categories'
 import { formatDateTime, formatRelativeTime } from '@/utils/format'
@@ -41,21 +42,14 @@ const favoritesError = ref('')
 const historyLoading = ref(false)
 const historyError = ref('')
 
-const notify = ref('')
-let notifyTimer: ReturnType<typeof setTimeout> | null = null
-
 function flash(message: string): void {
-  notify.value = message
-  if (notifyTimer !== null) clearTimeout(notifyTimer)
-  notifyTimer = setTimeout(() => {
-    notify.value = ''
-    notifyTimer = null
-  }, 2500)
+  ElMessage({
+    message,
+    type: message.includes('失败') ? 'error' : 'success',
+    duration: 2500,
+    showClose: true,
+  })
 }
-
-onBeforeUnmount(() => {
-  if (notifyTimer !== null) clearTimeout(notifyTimer)
-})
 
 function describeError(error: unknown): string {
   return error instanceof HttpError
@@ -200,12 +194,6 @@ watch(
   { immediate: true },
 )
 
-function toggleField(id: string): void {
-  const index = preferences.value.fields.indexOf(id)
-  if (index >= 0) preferences.value.fields.splice(index, 1)
-  else preferences.value.fields.push(id)
-}
-
 async function savePreferences(): Promise<void> {
   try {
     const saved = await savePreferencesApi({
@@ -284,88 +272,69 @@ const TABS: { key: TabKey; label: string }[] = [
     </header>
 
     <!-- 个人信息区（规范模块六（1）） -->
-    <div class="card profile__info">
-      <span class="profile__avatar" aria-hidden="true">{{ avatarText }}</span>
-      <dl class="profile__fields">
-        <div class="profile__field">
-          <dt>姓名</dt>
-          <dd>{{ auth.displayName || '—' }}</dd>
-        </div>
-        <div class="profile__field">
-          <dt>部门</dt>
-          <dd>{{ department }}</dd>
-        </div>
-        <div class="profile__field">
-          <dt>账号创建时间</dt>
-          <dd class="num">{{ createdAt }}</dd>
-        </div>
-      </dl>
-    </div>
+    <el-card class="profile__info" shadow="never">
+      <el-avatar :size="56" class="profile__avatar">{{ avatarText }}</el-avatar>
+      <el-descriptions :column="3" class="profile__fields">
+        <el-descriptions-item label="姓名">{{ auth.displayName || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="部门">{{ department }}</el-descriptions-item>
+        <el-descriptions-item label="账号创建时间">
+          <span class="num">{{ createdAt }}</span>
+        </el-descriptions-item>
+      </el-descriptions>
+    </el-card>
 
     <!-- Tab -->
-    <div class="tabs" role="tablist" aria-label="个人中心分区">
-      <button
-        v-for="tab in TABS"
-        :key="tab.key"
-        class="tabs__item"
-        :class="{ 'tabs__item--active': activeTab === tab.key }"
-        type="button"
-        role="tab"
-        :aria-selected="activeTab === tab.key"
-        @click="activeTab = tab.key"
-      >
-        {{ tab.label }}
-        <span v-if="tab.key === 'favorites' && favorites.length" class="tabs__count num">
-          {{ favorites.length }}
-        </span>
-        <span v-else-if="tab.key === 'history' && history.length" class="tabs__count num">
-          {{ history.length }}
-        </span>
-      </button>
-    </div>
+    <el-tabs v-model="activeTab" class="tabs" aria-label="个人中心分区">
+      <el-tab-pane v-for="tab in TABS" :key="tab.key" :name="tab.key">
+        <template #label>
+          <span>{{ tab.label }}</span>
+          <el-badge
+            v-if="tab.key === 'favorites' && favorites.length"
+            :value="favorites.length"
+            class="tabs__count"
+          />
+          <el-badge
+            v-else-if="tab.key === 'history' && history.length"
+            :value="history.length"
+            class="tabs__count"
+          />
+        </template>
+      </el-tab-pane>
+    </el-tabs>
 
-    <p v-if="notify" class="profile__notify" role="status">{{ notify }}</p>
     <!-- 我的收藏 -->
     <div v-if="activeTab === 'favorites'" class="panel">
-      <p v-if="favoritesError" class="profile__notify profile__notify--error" role="alert">
-        {{ favoritesError }}
-      </p>
-      <p v-if="favoritesLoading" class="panel__hint">加载中…</p>
+      <el-alert
+        v-if="favoritesError"
+        :title="favoritesError"
+        type="error"
+        show-icon
+        :closable="false"
+        class="profile__notify"
+      />
+      <el-skeleton v-if="favoritesLoading" :rows="3" animated />
       <div v-if="favorites.length" class="panel__toolbar">
-        <label class="check">
-          <input type="checkbox" :checked="allSelected" @change="toggleSelectAll" />
-          <span>全选</span>
-        </label>
-        <button
-          class="btn btn--danger"
-          type="button"
-          :disabled="selectedIds.length === 0"
-          @click="removeSelected"
-        >
+        <el-checkbox :model-value="allSelected" @change="toggleSelectAll">全选</el-checkbox>
+        <el-button type="danger" :disabled="selectedIds.length === 0" @click="removeSelected">
           批量取消收藏（{{ selectedIds.length }}）
-        </button>
+        </el-button>
       </div>
 
       <ul v-if="favorites.length" class="list">
         <li v-for="item in favorites" :key="item.article_id" class="list__item">
-          <label class="check">
-            <input
-              type="checkbox"
-              :checked="selectedIds.includes(item.article_id)"
-              :aria-label="`选择 ${item.title}`"
-              @change="toggleSelect(item.article_id)"
-            />
-          </label>
+          <el-checkbox
+            :model-value="selectedIds.includes(item.article_id)"
+            :aria-label="`选择 ${item.title}`"
+            @change="toggleSelect(item.article_id)"
+          />
           <RouterLink :to="{ name: 'article', params: { id: item.article_id } }" class="list__link">
-            <span class="list__tag">{{ categoryName(item.category ?? '') }}</span>
+            <el-tag size="small" effect="light">{{ categoryName(item.category ?? '') }}</el-tag>
             <span class="list__title">{{ item.title }}</span>
             <span class="list__meta">
               {{ item.source }} · 收藏于 {{ formatRelativeTime(item.favorited_at) }}
             </span>
           </RouterLink>
-          <button class="btn btn--text" type="button" @click="removeOne(item.article_id)">
-            取消收藏
-          </button>
+          <el-button link type="primary" @click="removeOne(item.article_id)">取消收藏</el-button>
         </li>
       </ul>
 
@@ -379,19 +348,24 @@ const TABS: { key: TabKey; label: string }[] = [
 
     <!-- 浏览历史 -->
     <div v-else-if="activeTab === 'history'" class="panel">
-      <p v-if="historyError" class="profile__notify profile__notify--error" role="alert">
-        {{ historyError }}
-      </p>
-      <p v-if="historyLoading" class="panel__hint">加载中…</p>
+      <el-alert
+        v-if="historyError"
+        :title="historyError"
+        type="error"
+        show-icon
+        :closable="false"
+        class="profile__notify"
+      />
+      <el-skeleton v-if="historyLoading" :rows="3" animated />
       <div v-if="history.length" class="panel__toolbar">
         <span class="panel__hint">最近浏览 {{ history.length }} 条（按时间倒序）</span>
-        <button class="btn btn--danger" type="button" @click="clearHistory">清空历史</button>
+        <el-button type="danger" plain @click="clearHistory">清空历史</el-button>
       </div>
 
       <ul v-if="history.length" class="list">
         <li v-for="item in history" :key="item.article_id" class="list__item">
           <RouterLink :to="{ name: 'article', params: { id: item.article_id } }" class="list__link">
-            <span class="list__tag">{{ categoryName(item.category ?? '') }}</span>
+            <el-tag size="small" effect="light">{{ categoryName(item.category ?? '') }}</el-tag>
             <span class="list__title">{{ item.title }}</span>
             <span class="list__meta">
               {{ item.source }} · {{ formatRelativeTime(item.viewed_at) }}
@@ -410,53 +384,59 @@ const TABS: { key: TabKey; label: string }[] = [
 
     <!-- 个性化设置 -->
     <div v-else-if="activeTab === 'settings'" class="panel">
-      <fieldset class="settings__group">
-        <legend class="settings__legend">关注领域</legend>
-        <div class="settings__checks">
-          <label v-for="id in FIELD_OPTIONS" :key="id" class="check">
-            <input
-              type="checkbox"
-              :checked="preferences.fields.includes(id)"
-              @change="toggleField(id)"
+      <el-card shadow="never" class="settings__group">
+        <template #header><span class="settings__legend">关注领域</span></template>
+        <el-checkbox-group v-model="preferences.fields" class="settings__checks">
+          <el-checkbox v-for="id in FIELD_OPTIONS" :key="id" :value="id">
+            {{ categoryName(id) }}
+          </el-checkbox>
+        </el-checkbox-group>
+      </el-card>
+
+      <el-card shadow="never" class="settings__group">
+        <template #header><span class="settings__legend">消息推送</span></template>
+        <el-form label-width="120px">
+          <el-form-item label="消息推送">
+            <el-switch
+              v-model="preferences.notifyEnabled"
+              active-text="已开启"
+              inactive-text="已关闭"
             />
-            <span>{{ categoryName(id) }}</span>
-          </label>
-        </div>
-      </fieldset>
+          </el-form-item>
+          <el-form-item label="推送时间偏好">
+            <el-time-picker
+              v-model="preferences.notifyTime"
+              format="HH:mm"
+              value-format="HH:mm"
+              placeholder="选择时间"
+            />
+          </el-form-item>
+        </el-form>
+      </el-card>
 
-      <fieldset class="settings__group">
-        <legend class="settings__legend">消息推送</legend>
-        <label class="switch">
-          <input v-model="preferences.notifyEnabled" type="checkbox" />
-          <span>{{ preferences.notifyEnabled ? '已开启' : '已关闭' }}</span>
-        </label>
-
-        <label class="settings__row">
-          <span>推送时间偏好</span>
-          <input v-model="preferences.notifyTime" class="input" type="time" />
-        </label>
-      </fieldset>
-
-      <button class="btn btn--primary" type="button" @click="savePreferences">保存设置</button>
+      <el-button type="primary" @click="savePreferences">保存设置</el-button>
     </div>
 
     <!-- 修改密码 -->
     <div v-else class="panel">
-      <div class="form">
-        <label class="form__row">
-          <span class="form__label">原密码</span>
-          <input
+      <el-form label-width="100px" class="form" @submit.prevent>
+        <el-form-item label="原密码">
+          <el-input
             v-model="oldPassword"
-            class="input"
             type="password"
+            show-password
             autocomplete="current-password"
           />
-        </label>
+        </el-form-item>
 
-        <label class="form__row">
-          <span class="form__label">新密码</span>
-          <input v-model="newPassword" class="input" type="password" autocomplete="new-password" />
-        </label>
+        <el-form-item label="新密码">
+          <el-input
+            v-model="newPassword"
+            type="password"
+            show-password
+            autocomplete="new-password"
+          />
+        </el-form-item>
 
         <ul class="rules">
           <li
@@ -469,27 +449,28 @@ const TABS: { key: TabKey; label: string }[] = [
           </li>
         </ul>
 
-        <label class="form__row">
-          <span class="form__label">确认新密码</span>
-          <input
+        <el-form-item label="确认新密码">
+          <el-input
             v-model="confirmPassword"
-            class="input"
             type="password"
+            show-password
             autocomplete="new-password"
           />
-        </label>
+        </el-form-item>
 
-        <p v-if="passwordError" class="form__error" role="alert">{{ passwordError }}</p>
+        <el-alert
+          v-if="passwordError"
+          :title="passwordError"
+          type="error"
+          show-icon
+          :closable="false"
+          class="form__error"
+        />
 
-        <button
-          class="btn btn--primary"
-          type="button"
-          :disabled="passwordSubmitting"
-          @click="submitPassword"
-        >
+        <el-button type="primary" :loading="passwordSubmitting" @click="submitPassword">
           {{ passwordSubmitting ? '提交中…' : '提交修改' }}
-        </button>
-      </div>
+        </el-button>
+      </el-form>
     </div>
   </section>
 </template>
@@ -533,10 +514,12 @@ const TABS: { key: TabKey; label: string }[] = [
 }
 
 .profile__fields {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-6);
   margin: 0;
+}
+
+.profile__fields :deep(.el-descriptions__label) {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
 }
 
 .profile__field dt {

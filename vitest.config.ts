@@ -1,6 +1,9 @@
 import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
+import AutoImport from 'unplugin-auto-import/vite'
+import Components from 'unplugin-vue-components/vite'
+import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 
 /**
  * 单元测试配置（规范 2.2.1（四）测试要求：Vitest，核心逻辑覆盖率 ≥80%）。
@@ -9,7 +12,12 @@ import vue from '@vitejs/plugin-vue'
  * 跑测试时没必要也不应该依赖后端地址配置。
  */
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [
+    vue(),
+    // 与 vite.config.ts 保持一致：测试里也要能解析模板中的 <el-*>。
+    AutoImport({ resolvers: [ElementPlusResolver()] }),
+    Components({ resolvers: [ElementPlusResolver()] }),
+  ],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
@@ -20,6 +28,9 @@ export default defineConfig({
     globals: true,
     include: ['tests/**/*.spec.ts'],
     setupFiles: ['tests/setup.ts'],
+    // Element Plus 的按需解析会注入 theme-chalk CSS；不 inline 的话 Node 会按
+    // 原生 ESM 加载 .css 并报 Unknown file extension。
+    server: { deps: { inline: ['element-plus'] } },
     restoreMocks: true,
     coverage: {
       provider: 'v8',

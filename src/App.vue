@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import AppNav from '@/components/AppNav.vue'
 import { onPendingChange } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
@@ -38,24 +39,26 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="app">
-    <div v-if="pending > 0" class="app__progress" role="progressbar" aria-label="加载中" />
-    <AppNav v-if="showNav">
-      <RouterView v-slot="{ Component }">
-        <Transition name="fade" mode="out-in">
-          <component :is="Component" />
-        </Transition>
-      </RouterView>
-    </AppNav>
+  <el-config-provider :locale="zhCn">
+    <div class="app">
+      <div v-if="pending > 0" class="app__progress" role="progressbar" aria-label="加载中" />
+      <AppNav v-if="showNav">
+        <RouterView v-slot="{ Component }">
+          <Transition name="fade" mode="out-in">
+            <component :is="Component" />
+          </Transition>
+        </RouterView>
+      </AppNav>
 
-    <main v-else class="app__main">
-      <RouterView v-slot="{ Component }">
-        <Transition name="fade" mode="out-in">
-          <component :is="Component" />
-        </Transition>
-      </RouterView>
-    </main>
-  </div>
+      <main v-else class="app__main">
+        <RouterView v-slot="{ Component }">
+          <Transition name="fade" mode="out-in">
+            <component :is="Component" />
+          </Transition>
+        </RouterView>
+      </main>
+    </div>
+  </el-config-provider>
 </template>
 
 <style scoped>

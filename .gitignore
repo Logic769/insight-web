@@ -10,3 +10,5 @@ coverage
 !.vscode/settings.json
 !.vscode/launch.json
 !.vscode/tasks.json
+deploy/certs/*.pem
+deploy/certs/*.key

@@ -528,53 +528,55 @@ onMounted(() => {
       <span class="badge">管理员</span>
     </header>
 
-    <div class="tabs" role="tablist" aria-label="管理控制台分区">
-      <button
-        v-for="tab in TABS"
-        :key="tab.key"
-        class="tabs__item"
-        :class="{ 'tabs__item--active': activeTab === tab.key }"
-        type="button"
-        role="tab"
-        :aria-selected="activeTab === tab.key"
-        @click="activeTab = tab.key"
-      >
-        {{ tab.label }}
-      </button>
-    </div>
+    <el-tabs v-model="activeTab" class="tabs" aria-label="管理控制台分区">
+      <el-tab-pane v-for="tab in TABS" :key="tab.key" :name="tab.key" :label="tab.label" />
+    </el-tabs>
 
-    <p v-if="message" class="notice notice--success" role="status">{{ message }}</p>
-    <p v-if="error" class="notice notice--error" role="alert">{{ error }}</p>
-    <p v-if="loading" class="notice">加载中…</p>
+    <el-alert
+      v-if="message"
+      :title="message"
+      type="success"
+      show-icon
+      :closable="false"
+      class="notice"
+    />
+    <el-alert
+      v-if="error"
+      :title="error"
+      type="error"
+      show-icon
+      :closable="false"
+      class="notice notice--error"
+    />
+    <p v-if="loading" class="notice muted">加载中…</p>
+    <el-skeleton v-if="loading" :rows="4" animated class="notice" />
 
     <!-- 统计看板 -->
     <div v-if="activeTab === 'stats'" class="panel">
       <div class="toolbar">
         <span class="muted">统计范围</span>
-        <select v-model.number="statsDays" class="input" aria-label="统计天数">
-          <option :value="7">最近 7 天</option>
-          <option :value="30">最近 30 天</option>
-          <option :value="90">最近 90 天</option>
-        </select>
+        <el-select v-model="statsDays" aria-label="统计天数" class="toolbar__select">
+          <el-option :value="7" label="最近 7 天" />
+          <el-option :value="30" label="最近 30 天" />
+          <el-option :value="90" label="最近 90 天" />
+        </el-select>
       </div>
 
       <div v-if="stats" class="stats">
-        <div class="stat">
-          <span class="stat__label">公告总量</span>
-          <strong class="stat__value num">{{ stats.totals.articles }}</strong>
-        </div>
-        <div class="stat">
-          <span class="stat__label">来源站点</span>
-          <strong class="stat__value num">{{ stats.totals.sources }}</strong>
-        </div>
-        <div class="stat">
-          <span class="stat__label">账号数</span>
-          <strong class="stat__value num">{{ stats.totals.users }}</strong>
-        </div>
-        <div class="stat">
-          <span class="stat__label">活跃用户</span>
-          <strong class="stat__value num">{{ stats.totals.active_users }}</strong>
-        </div>
+        <el-card
+          v-for="item in [
+            { label: '公告总量', value: stats.totals.articles },
+            { label: '来源站点', value: stats.totals.sources },
+            { label: '账号数', value: stats.totals.users },
+            { label: '活跃用户', value: stats.totals.active_users },
+          ]"
+          :key="item.label"
+          shadow="never"
+          class="stat"
+        >
+          <span class="stat__label">{{ item.label }}</span>
+          <strong class="stat__value num">{{ item.value }}</strong>
+        </el-card>
       </div>
 
       <div class="charts">
@@ -599,334 +601,290 @@ onMounted(() => {
     <!-- 站点管理 -->
     <div v-else-if="activeTab === 'sites'" class="panel">
       <div class="toolbar">
-        <button class="btn btn--primary" type="button" @click="openSiteCreate">新增站点</button>
+        <el-button type="primary" @click="openSiteCreate">新增站点</el-button>
         <span class="muted">共 {{ sites.length }} 个站点</span>
       </div>
-      <div class="table-wrap">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>名称</th>
-              <th>类型</th>
-              <th>列表地址</th>
-              <th>分类</th>
-              <th>地区</th>
-              <th>时区</th>
-              <th>渲染</th>
-              <th>状态</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="site in sites" :key="site.name">
-              <td>{{ site.name }}</td>
-              <td>
-                <span class="badge">{{ site.has_api ? '接口采集' : '列表抓取' }}</span>
-              </td>
-              <td class="ellipsis" :title="site.list_url">
-                {{ site.has_api ? '由接口配置维护' : site.list_url }}
-              </td>
-              <td>{{ site.category || '—' }}</td>
-              <td>{{ site.region || '—' }}</td>
-              <td>{{ site.timezone }}</td>
-              <td>{{ site.render ? '需要' : '否' }}</td>
-              <td>
-                <span class="state" :class="site.enabled ? 'state--on' : 'state--off'">{{
-                  site.enabled ? '启用' : '停用'
-                }}</span>
-              </td>
-              <td class="actions">
-                <button class="btn btn--text" type="button" @click="openSiteEdit(site)">
-                  编辑
-                </button>
-                <button class="btn btn--text" type="button" @click="toggleSite(site)">
-                  {{ site.enabled ? '停用' : '启用' }}
-                </button>
-                <button
-                  class="btn btn--text btn--danger-text"
-                  type="button"
-                  @click="removeSite(site)"
-                >
-                  删除
-                </button>
-              </td>
-            </tr>
-            <tr v-if="!sites.length">
-              <td colspan="9" class="empty">暂无站点</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <el-table :data="sites" stripe class="table" empty-text="暂无站点">
+        <el-table-column prop="name" label="名称" min-width="120" />
+        <el-table-column label="类型" width="100">
+          <template #default="{ row }">
+            <el-tag size="small" effect="light">
+              {{ row.has_api ? '接口采集' : '列表抓取' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="列表地址" min-width="200" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ row.has_api ? '由接口配置维护' : row.list_url }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="category" label="分类" width="140" />
+        <el-table-column prop="region" label="地区" width="100" />
+        <el-table-column prop="timezone" label="时区" width="130" />
+        <el-table-column label="渲染" width="80">
+          <template #default="{ row }">{{ row.render ? '需要' : '否' }}</template>
+        </el-table-column>
+        <el-table-column label="状态" width="90">
+          <template #default="{ row }">
+            <el-tag :type="row.enabled ? 'success' : 'info'" size="small">
+              {{ row.enabled ? '启用' : '停用' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="190" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" @click="openSiteEdit(row)">编辑</el-button>
+            <el-button link type="primary" @click="toggleSite(row)">
+              {{ row.enabled ? '停用' : '启用' }}
+            </el-button>
+            <el-button link type="danger" @click="removeSite(row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
     </div>
 
     <!-- 账号管理 -->
     <div v-else-if="activeTab === 'users'" class="panel">
       <div class="toolbar">
-        <input
+        <el-input
           v-model="userQuery"
-          class="input"
+          class="toolbar__input"
           placeholder="搜索用户名/姓名"
           aria-label="搜索账号"
+          clearable
         />
-        <select v-model="userRole" class="input" aria-label="角色筛选">
-          <option value="">全部角色</option>
-          <option value="admin">管理员</option>
-          <option value="user">普通用户</option>
-        </select>
-        <select v-model="userStatus" class="input" aria-label="状态筛选">
-          <option value="">全部状态</option>
-          <option value="active">启用</option>
-          <option value="disabled">禁用</option>
-        </select>
-        <button class="btn" type="button" @click="searchUsers">查询</button>
-        <button class="btn btn--primary" type="button" @click="openUserCreate">新增账号</button>
+        <el-select v-model="userRole" aria-label="角色筛选" class="toolbar__select">
+          <el-option value="" label="全部角色" />
+          <el-option value="admin" label="管理员" />
+          <el-option value="user" label="普通用户" />
+        </el-select>
+        <el-select v-model="userStatus" aria-label="状态筛选" class="toolbar__select">
+          <el-option value="" label="全部状态" />
+          <el-option value="active" label="启用" />
+          <el-option value="disabled" label="禁用" />
+        </el-select>
+        <el-button @click="searchUsers">查询</el-button>
+        <el-button type="primary" @click="openUserCreate">新增账号</el-button>
         <span class="muted">共 {{ userTotal }} 个账号</span>
       </div>
 
-      <p v-if="tempPassword" class="notice notice--success" role="status">
-        临时密码：<code class="temp">{{ tempPassword }}</code
-        >（仅显示一次，请立即转交用户）
+      <el-alert v-if="tempPassword" type="success" show-icon :closable="false" class="notice">
+        <template #title>
+          临时密码：<code class="temp">{{ tempPassword }}</code
+          >（仅显示一次，请立即转交用户）
+        </template>
+      </el-alert>
+
+      <el-table :data="users" stripe class="table" empty-text="暂无账号">
+        <el-table-column prop="username" label="用户名" min-width="120" />
+        <el-table-column prop="display_name" label="姓名" min-width="100" />
+        <el-table-column prop="department" label="部门" min-width="120" />
+        <el-table-column label="角色" width="140">
+          <template #default="{ row }">
+            <el-select
+              :model-value="row.role"
+              size="small"
+              :aria-label="`修改 ${row.username} 的角色`"
+              @change="(value: 'admin' | 'user') => patchUser(row, { role: value })"
+            >
+              <el-option value="user" label="普通用户" />
+              <el-option value="admin" label="管理员" />
+            </el-select>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="90">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 'active' ? 'success' : 'info'" size="small">
+              {{ row.status === 'active' ? '启用' : '禁用' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="last_login_at" label="最近登录" min-width="160" />
+        <el-table-column label="操作" width="170" fixed="right">
+          <template #default="{ row }">
+            <el-button
+              link
+              type="primary"
+              @click="patchUser(row, { status: row.status === 'active' ? 'disabled' : 'active' })"
+            >
+              {{ row.status === 'active' ? '禁用' : '启用' }}
+            </el-button>
+            <el-button link type="primary" @click="resetPassword(row)">重置密码</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <p class="pager-summary muted">
+        第 {{ userPage }} / {{ userPages }} 页 · 共 {{ userTotal }} 个账号
       </p>
-
-      <div class="table-wrap">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>用户名</th>
-              <th>姓名</th>
-              <th>部门</th>
-              <th>角色</th>
-              <th>状态</th>
-              <th>最近登录</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="user in users" :key="user.id">
-              <td>{{ user.username }}</td>
-              <td>{{ user.display_name || '—' }}</td>
-              <td>{{ user.department || '—' }}</td>
-              <td>
-                <select
-                  class="input input--sm"
-                  :value="user.role"
-                  :aria-label="`修改 ${user.username} 的角色`"
-                  @change="
-                    patchUser(user, {
-                      role: ($event.target as HTMLSelectElement).value as 'admin' | 'user',
-                    })
-                  "
-                >
-                  <option value="user">普通用户</option>
-                  <option value="admin">管理员</option>
-                </select>
-              </td>
-              <td>
-                <span
-                  class="state"
-                  :class="user.status === 'active' ? 'state--on' : 'state--off'"
-                  >{{ user.status === 'active' ? '启用' : '禁用' }}</span
-                >
-              </td>
-              <td>{{ user.last_login_at || '—' }}</td>
-              <td class="actions">
-                <button
-                  class="btn btn--text"
-                  type="button"
-                  @click="
-                    patchUser(user, { status: user.status === 'active' ? 'disabled' : 'active' })
-                  "
-                >
-                  {{ user.status === 'active' ? '禁用' : '启用' }}
-                </button>
-                <button class="btn btn--text" type="button" @click="resetPassword(user)">
-                  重置密码
-                </button>
-              </td>
-            </tr>
-            <tr v-if="!users.length">
-              <td colspan="7" class="empty">暂无账号</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="pager">
-        <button
-          class="btn"
-          type="button"
-          :disabled="userPage <= 1"
-          @click="goUserPage(userPage - 1)"
-        >
-          上一页
-        </button>
-        <span class="muted"
-          >第 {{ userPage }} / {{ userPages }} 页 · 共 {{ userTotal }} 个账号</span
-        >
-        <button
-          class="btn"
-          type="button"
-          :disabled="userPage >= userPages"
-          @click="goUserPage(userPage + 1)"
-        >
-          下一页
-        </button>
-      </div>
+      <el-pagination
+        class="pager admin-pager admin-pager--users"
+        background
+        layout="prev, pager, next, total"
+        :current-page="userPage"
+        :page-size="USER_PAGE_SIZE"
+        :total="userTotal"
+        @current-change="goUserPage"
+      />
     </div>
 
     <!-- 操作日志 -->
     <div v-else class="panel">
       <div class="toolbar">
-        <select v-model="logAction" class="input" aria-label="动作筛选">
-          <option value="">全部动作</option>
-          <option v-for="(label, action) in ACTION_LABELS" :key="action" :value="action">
-            {{ label }}
-          </option>
-        </select>
-        <input v-model="logUsername" class="input" placeholder="用户名" aria-label="用户名筛选" />
-        <input v-model="logDateFrom" class="input" type="date" aria-label="开始日期" />
+        <el-select v-model="logAction" aria-label="动作筛选" class="toolbar__select">
+          <el-option value="" label="全部动作" />
+          <el-option
+            v-for="(label, action) in ACTION_LABELS"
+            :key="action"
+            :value="action"
+            :label="label"
+          />
+        </el-select>
+        <el-input
+          v-model="logUsername"
+          class="toolbar__input"
+          placeholder="用户名"
+          aria-label="用户名筛选"
+        />
+        <el-date-picker
+          v-model="logDateFrom"
+          type="date"
+          value-format="YYYY-MM-DD"
+          placeholder="开始日期"
+          aria-label="开始日期"
+        />
         <span class="muted">至</span>
-        <input v-model="logDateTo" class="input" type="date" aria-label="结束日期" />
-        <button class="btn" type="button" @click="searchLogs">查询</button>
-        <button class="btn" type="button" @click="resetLogFilters">重置</button>
+        <el-date-picker
+          v-model="logDateTo"
+          type="date"
+          value-format="YYYY-MM-DD"
+          placeholder="结束日期"
+          aria-label="结束日期"
+        />
+        <el-button @click="searchLogs">查询</el-button>
+        <el-button @click="resetLogFilters">重置</el-button>
       </div>
 
-      <div class="table-wrap">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>时间</th>
-              <th>用户</th>
-              <th>动作</th>
-              <th>对象</th>
-              <th>详情</th>
-              <th>IP</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="log in logs" :key="log.id">
-              <td>{{ log.created_at }}</td>
-              <td>{{ log.username || '—' }}</td>
-              <td>{{ actionLabel(log.action) }}</td>
-              <td>{{ log.target || '—' }}</td>
-              <td class="ellipsis" :title="log.detail">{{ log.detail || '—' }}</td>
-              <td>{{ log.ip || '—' }}</td>
-            </tr>
-            <tr v-if="!logs.length">
-              <td colspan="6" class="empty">暂无日志</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <el-table :data="logs" stripe class="table" empty-text="暂无日志">
+        <el-table-column prop="created_at" label="时间" min-width="170" />
+        <el-table-column prop="username" label="用户" width="120" />
+        <el-table-column label="动作" min-width="120">
+          <template #default="{ row }">{{ actionLabel(row.action) }}</template>
+        </el-table-column>
+        <el-table-column prop="target" label="对象" min-width="140" />
+        <el-table-column prop="detail" label="详情" min-width="220" show-overflow-tooltip />
+        <el-table-column prop="ip" label="IP" width="130" />
+      </el-table>
 
-      <div class="pager">
-        <button class="btn" type="button" :disabled="logPage <= 1" @click="goLogPage(logPage - 1)">
-          上一页
-        </button>
-        <span class="muted">第 {{ logPage }} / {{ logPages }} 页 · 共 {{ logTotal }} 条</span>
-        <button
-          class="btn"
-          type="button"
-          :disabled="logPage >= logPages"
-          @click="goLogPage(logPage + 1)"
-        >
-          下一页
-        </button>
-      </div>
+      <p class="pager-summary muted">
+        第 {{ logPage }} / {{ logPages }} 页 · 共 {{ logTotal }} 条日志
+      </p>
+      <el-pagination
+        class="pager admin-pager admin-pager--logs"
+        background
+        layout="prev, pager, next, total"
+        :current-page="logPage"
+        :page-size="LOG_PAGE_SIZE"
+        :total="logTotal"
+        @current-change="goLogPage"
+      />
     </div>
 
     <!-- 站点编辑弹窗 -->
-    <div v-if="siteModalOpen" class="modal" role="dialog" aria-modal="true" aria-label="站点编辑">
-      <div class="modal__card">
-        <h2 class="modal__title">{{ editingSiteName === null ? '新增站点' : '编辑站点' }}</h2>
-        <label class="field"
-          ><span>名称</span
-          ><input v-model="siteForm.name" class="input" :disabled="editingSiteName !== null"
-        /></label>
-        <p v-if="editingSiteHasApi" class="notice" role="status">
-          接口型站点的抓取地址与 XPath
-          由爬虫接口配置维护，此处只能修改分类、地区、时区、渲染与启停。
-        </p>
-        <label class="field"
-          ><span>列表地址</span
-          ><input v-model="siteForm.list_url" class="input" :disabled="editingSiteHasApi"
-        /></label>
-        <label class="field"
-          ><span>分类</span
-          ><input v-model="siteForm.category" class="input" placeholder="如 project_application"
-        /></label>
-        <label class="field"
-          ><span>地区</span><input v-model="siteForm.region" class="input"
-        /></label>
-        <label class="field"
-          ><span>时区</span><input v-model="siteForm.timezone" class="input"
-        /></label>
-        <label class="field"
-          ><span>列表项 XPath</span
-          ><input v-model="siteForm.item_xpath" class="input" :disabled="editingSiteHasApi"
-        /></label>
-        <label class="field"
-          ><span>标题 XPath</span
-          ><input v-model="siteForm.title_xpath" class="input" :disabled="editingSiteHasApi"
-        /></label>
-        <label class="field"
-          ><span>链接 XPath</span
-          ><input v-model="siteForm.url_xpath" class="input" :disabled="editingSiteHasApi"
-        /></label>
-        <label class="field"
-          ><span>日期 XPath（可选）</span
-          ><input v-model="siteForm.date_xpath" class="input" :disabled="editingSiteHasApi"
-        /></label>
-        <label class="check"
-          ><input v-model="siteForm.render" type="checkbox" /><span
-            >列表页需要浏览器渲染</span
-          ></label
-        >
-        <label class="check"
-          ><input v-model="siteForm.enabled" type="checkbox" /><span>启用</span></label
-        >
-        <div class="modal__actions">
-          <button class="btn" type="button" @click="siteModalOpen = false">取消</button>
-          <button class="btn btn--primary" type="button" @click="submitSite">保存</button>
-        </div>
-      </div>
-    </div>
+    <el-dialog
+      v-model="siteModalOpen"
+      :title="editingSiteName === null ? '新增站点' : '编辑站点'"
+      width="620px"
+      destroy-on-close
+      :teleported="false"
+    >
+      <el-form label-position="top" class="form">
+        <el-form-item label="名称">
+          <el-input v-model="siteForm.name" :disabled="editingSiteName !== null" />
+        </el-form-item>
+        <el-alert
+          v-if="editingSiteHasApi"
+          type="info"
+          show-icon
+          :closable="false"
+          title="接口型站点只能修改分类、地区、时区、渲染与启停"
+          class="notice"
+        />
+        <el-form-item label="列表地址">
+          <el-input v-model="siteForm.list_url" :disabled="editingSiteHasApi" />
+        </el-form-item>
+        <el-form-item label="分类">
+          <el-input v-model="siteForm.category" placeholder="如 project_application" />
+        </el-form-item>
+        <el-form-item label="地区">
+          <el-input v-model="siteForm.region" />
+        </el-form-item>
+        <el-form-item label="时区">
+          <el-input v-model="siteForm.timezone" />
+        </el-form-item>
+        <el-form-item label="列表项 XPath">
+          <el-input v-model="siteForm.item_xpath" :disabled="editingSiteHasApi" />
+        </el-form-item>
+        <el-form-item label="标题 XPath">
+          <el-input v-model="siteForm.title_xpath" :disabled="editingSiteHasApi" />
+        </el-form-item>
+        <el-form-item label="链接 XPath">
+          <el-input v-model="siteForm.url_xpath" :disabled="editingSiteHasApi" />
+        </el-form-item>
+        <el-form-item label="日期 XPath（可选）">
+          <el-input v-model="siteForm.date_xpath" :disabled="editingSiteHasApi" />
+        </el-form-item>
+        <el-form-item>
+          <el-checkbox v-model="siteForm.render">列表页需要浏览器渲染</el-checkbox>
+        </el-form-item>
+        <el-form-item>
+          <el-checkbox v-model="siteForm.enabled">启用</el-checkbox>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="siteModalOpen = false">取消</el-button>
+        <el-button type="primary" @click="submitSite">保存</el-button>
+      </template>
+    </el-dialog>
 
     <!-- 账号新增弹窗 -->
-    <div v-if="userModalOpen" class="modal" role="dialog" aria-modal="true" aria-label="新增账号">
-      <div class="modal__card">
-        <h2 class="modal__title">新增账号</h2>
-        <label class="field"
-          ><span>用户名</span><input v-model="userForm.username" class="input" autocomplete="off"
-        /></label>
-        <label class="field"
-          ><span>姓名</span><input v-model="userForm.display_name" class="input"
-        /></label>
-        <label class="field"
-          ><span>部门</span><input v-model="userForm.department" class="input"
-        /></label>
-        <label class="field">
-          <span>角色</span>
-          <select v-model="userForm.role" class="input">
-            <option value="user">普通用户</option>
-            <option value="admin">管理员</option>
-          </select>
-        </label>
-        <label class="field">
-          <span>初始密码（留空则自动生成）</span>
-          <input
+    <el-dialog
+      v-model="userModalOpen"
+      title="新增账号"
+      width="460px"
+      destroy-on-close
+      :teleported="false"
+    >
+      <el-form label-position="top" class="form">
+        <el-form-item label="用户名">
+          <el-input v-model="userForm.username" autocomplete="off" />
+        </el-form-item>
+        <el-form-item label="姓名">
+          <el-input v-model="userForm.display_name" />
+        </el-form-item>
+        <el-form-item label="部门">
+          <el-input v-model="userForm.department" />
+        </el-form-item>
+        <el-form-item label="角色">
+          <el-select v-model="userForm.role">
+            <el-option value="user" label="普通用户" />
+            <el-option value="admin" label="管理员" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="初始密码（留空则自动生成）">
+          <el-input
             v-model="userForm.password"
-            class="input"
             type="password"
+            show-password
             autocomplete="new-password"
           />
-        </label>
-        <div class="modal__actions">
-          <button class="btn" type="button" @click="userModalOpen = false">关闭</button>
-          <button class="btn btn--primary" type="button" @click="submitUser">创建</button>
-        </div>
-      </div>
-    </div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="userModalOpen = false">关闭</el-button>
+        <el-button type="primary" @click="submitUser">创建</el-button>
+      </template>
+    </el-dialog>
   </section>
 </template>
 

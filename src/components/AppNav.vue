@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 顶部导航 + 侧边栏。
+ * 顶部导航 + 侧边栏（Element Plus 版）。
  * 对照规范 2.2.1（二）模块二：
  * （1）顶部导航栏：系统 Logo、当前时间、用户头像与下拉菜单（含个人中心、退出登录）
  * （6）侧边栏折叠/展开：折叠后仅显示图标，展开显示完整菜单文字
@@ -9,9 +9,20 @@
  * 消息通知（5）：顶部铃铛展示未读角标，下拉查看新分析出的项目申报公告；
  * 打开通知即标记已读，侧栏折叠不影响。数据来自 /v1/notifications。
  */
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, markRaw, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
+import {
+  ArrowDown,
+  Bell,
+  Expand,
+  Fold,
+  Grid,
+  HomeFilled,
+  Search,
+  Setting,
+  User,
+} from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import {
   listNotifications,
@@ -28,8 +39,6 @@ const { user, displayName, isAdmin } = storeToRefs(auth)
 
 /** 侧边栏折叠状态（规范模块二（6）） */
 const collapsed = ref(false)
-/** 用户下拉菜单展开状态 */
-const menuOpen = ref(false)
 /** 全局搜索关键词 */
 const globalKeyword = ref('')
 
@@ -57,6 +66,11 @@ async function loadNotifications(): Promise<void> {
   }
 }
 
+function toggleBell(): void {
+  bellOpen.value = !bellOpen.value
+  if (bellOpen.value) void loadNotifications()
+}
+
 onMounted(() => {
   void loadNotifications()
   bellTimer = setInterval(() => void loadNotifications(), 60_000)
@@ -75,11 +89,6 @@ watch(
     if (nextUserId !== null) void loadNotifications()
   },
 )
-
-async function toggleBell(): Promise<void> {
-  bellOpen.value = !bellOpen.value
-  if (bellOpen.value) await loadNotifications()
-}
 
 async function openNotification(item: NotificationItem): Promise<void> {
   bellOpen.value = false
@@ -111,13 +120,21 @@ async function readAllNotifications(): Promise<void> {
 
 const menu = computed(() => {
   const items = [
-    { to: '/', label: '首页', icon: 'home' },
-    { to: '/category', label: '分类浏览', icon: 'category' },
-    { to: '/search', label: '信息检索', icon: 'search' },
-    { to: '/profile', label: '个人中心', icon: 'user' },
+    { to: '/', label: '首页', icon: markRaw(HomeFilled) },
+    { to: '/category', label: '分类浏览', icon: markRaw(Grid) },
+    { to: '/search', label: '信息检索', icon: markRaw(Search) },
+    { to: '/profile', label: '个人中心', icon: markRaw(User) },
   ]
-  if (isAdmin.value) items.push({ to: '/admin', label: '管理控制台', icon: 'admin' })
+  if (isAdmin.value) items.push({ to: '/admin', label: '管理控制台', icon: markRaw(Setting) })
   return items
+})
+
+/** 当前激活菜单：取匹配到的最长前缀，子路径也能高亮父菜单 */
+const activeMenu = computed(() => {
+  const matched = [...menu.value]
+    .sort((a, b) => b.to.length - a.to.length)
+    .find((item) => (item.to === '/' ? route.path === '/' : route.path.startsWith(item.to)))
+  return matched?.to ?? route.path
 })
 
 /** 当前时间，每分钟刷新（规范模块二（1）要求顶部展示当前时间） */
@@ -152,15 +169,15 @@ const avatarText = computed(() =>
   displayName.value ? displayName.value.charAt(0).toUpperCase() : '?',
 )
 
-async function handleLogout(): Promise<void> {
-  menuOpen.value = false
-  await auth.logout()
-  router.replace({ name: 'login' })
-}
-
-function goProfile(): void {
-  menuOpen.value = false
-  router.push({ name: 'profile' })
+async function handleUserCommand(command: string): Promise<void> {
+  if (command === 'profile') {
+    await router.push({ name: 'profile' })
+    return
+  }
+  if (command === 'logout') {
+    await auth.logout()
+    router.replace({ name: 'login' })
+  }
 }
 
 /** 全局搜索：跳到检索页并带上关键词 */
@@ -171,28 +188,12 @@ function submitGlobal(): void {
   globalKeyword.value = ''
 }
 
-/** 点到导航外部时收起下拉菜单与通知面板 */
-function onDocumentClick(event: MouseEvent): void {
-  const target = event.target as HTMLElement | null
-  if (!target?.closest('.nav__user')) menuOpen.value = false
-  if (!target?.closest('.nav__bell')) bellOpen.value = false
-}
-
-const anyPanelOpen = computed(() => menuOpen.value || bellOpen.value)
-
-watch(anyPanelOpen, (open) => {
-  if (open) document.addEventListener('click', onDocumentClick)
-  else document.removeEventListener('click', onDocumentClick)
-})
+const foldIcon = computed(() => (collapsed.value ? Expand : Fold))
 
 onBeforeUnmount(() => {
-  document.removeEventListener('click', onDocumentClick)
   if (bellTimer !== null) clearInterval(bellTimer)
   bellTimer = null
 })
-
-const isActive = (to: string): boolean =>
-  to === '/' ? route.path === '/' : route.path === to || route.path.startsWith(to + '/')
 </script>
 
 <template>
@@ -211,121 +212,36 @@ const isActive = (to: string): boolean =>
         <span v-show="!collapsed" class="side__name">政策情报助手</span>
       </RouterLink>
 
-      <nav class="side__menu">
-        <RouterLink
+      <el-menu
+        class="side__menu"
+        :default-active="activeMenu"
+        :collapse="collapsed"
+        :collapse-transition="false"
+        router
+      >
+        <el-menu-item
           v-for="item in menu"
           :key="item.to"
-          :to="item.to"
+          :index="item.to"
           class="side__link"
-          :class="{ 'side__link--active': isActive(item.to) }"
-          :title="collapsed ? item.label : undefined"
+          :class="{ 'side__link--active': activeMenu === item.to }"
           :aria-label="item.label"
         >
-          <span class="side__icon" aria-hidden="true">
-            <svg v-if="item.icon === 'home'" viewBox="0 0 20 20" width="18" height="18">
-              <path
-                d="M3 8.5 10 3l7 5.5V16a1 1 0 0 1-1 1h-4v-5H8v5H4a1 1 0 0 1-1-1V8.5Z"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.6"
-                stroke-linejoin="round"
-              />
-            </svg>
-            <svg v-else-if="item.icon === 'category'" viewBox="0 0 20 20" width="18" height="18">
-              <rect
-                x="3"
-                y="3"
-                width="6"
-                height="6"
-                rx="1.5"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.6"
-              />
-              <rect
-                x="11"
-                y="3"
-                width="6"
-                height="6"
-                rx="1.5"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.6"
-              />
-              <rect
-                x="3"
-                y="11"
-                width="6"
-                height="6"
-                rx="1.5"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.6"
-              />
-              <rect
-                x="11"
-                y="11"
-                width="6"
-                height="6"
-                rx="1.5"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.6"
-              />
-            </svg>
-            <svg v-else-if="item.icon === 'search'" viewBox="0 0 20 20" width="18" height="18">
-              <circle cx="9" cy="9" r="5.5" fill="none" stroke="currentColor" stroke-width="1.6" />
-              <line
-                x1="13.2"
-                y1="13.2"
-                x2="17"
-                y2="17"
-                stroke="currentColor"
-                stroke-width="1.8"
-                stroke-linecap="round"
-              />
-            </svg>
-            <svg v-else-if="item.icon === 'user'" viewBox="0 0 20 20" width="18" height="18">
-              <circle cx="10" cy="7" r="3.4" fill="none" stroke="currentColor" stroke-width="1.6" />
-              <path
-                d="M4 17c0-3 2.7-5 6-5s6 2 6 5"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.6"
-                stroke-linecap="round"
-              />
-            </svg>
-            <svg v-else viewBox="0 0 20 20" width="18" height="18">
-              <circle
-                cx="10"
-                cy="10"
-                r="2.6"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.6"
-              />
-              <path
-                d="M10 2.8v2M10 15.2v2M2.8 10h2M15.2 10h2M4.9 4.9l1.4 1.4M13.7 13.7l1.4 1.4M15.1 4.9l-1.4 1.4M6.3 13.7l-1.4 1.4"
-                stroke="currentColor"
-                stroke-width="1.4"
-                stroke-linecap="round"
-              />
-            </svg>
-          </span>
-          <span v-show="!collapsed" class="side__label">{{ item.label }}</span>
-        </RouterLink>
-      </nav>
+          <el-icon><component :is="item.icon" /></el-icon>
+          <template #title>{{ item.label }}</template>
+        </el-menu-item>
+      </el-menu>
 
-      <button
+      <el-button
         class="side__toggle"
-        type="button"
+        text
         :aria-expanded="!collapsed"
         :aria-label="collapsed ? '展开侧边栏' : '折叠侧边栏'"
         @click="collapsed = !collapsed"
       >
-        <span aria-hidden="true">{{ collapsed ? '»' : '«' }}</span>
+        <el-icon><component :is="foldIcon" /></el-icon>
         <span v-show="!collapsed">收起</span>
-      </button>
+      </el-button>
     </aside>
 
     <!-- 主体 -->
@@ -336,98 +252,85 @@ const isActive = (to: string): boolean =>
           <RouterLink to="/" class="nav__brand">政策情报与项目申报智能助手</RouterLink>
         </div>
 
-        <form class="nav__search" role="search" @submit.prevent="submitGlobal">
-          <label class="visually-hidden" for="global-search">全局搜索</label>
-          <input
-            id="global-search"
-            v-model="globalKeyword"
-            class="nav__search-input"
-            type="search"
-            placeholder="全局搜索公告关键词…"
-            autocomplete="off"
-          />
-          <button class="nav__search-btn" type="submit">搜索</button>
-        </form>
+        <el-input
+          id="global-search"
+          v-model="globalKeyword"
+          class="nav__search"
+          placeholder="全局搜索公告关键词…"
+          clearable
+          @keyup.enter="submitGlobal"
+        >
+          <template #append>
+            <el-button :icon="Search" @click="submitGlobal">搜索</el-button>
+          </template>
+        </el-input>
 
         <div class="nav__right">
           <span class="nav__time num" :title="now.toISOString()">{{ timeText }}</span>
 
           <div class="nav__bell">
-            <button
+            <el-button
               class="nav__bell-btn"
-              type="button"
+              circle
+              text
+              :icon="Bell"
               aria-label="消息通知"
-              :aria-expanded="bellOpen"
-              aria-haspopup="dialog"
               @click="toggleBell"
-            >
-              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                <path
-                  d="M12 3a6 6 0 0 0-6 6v3.2l-1.4 2.4a1 1 0 0 0 .9 1.5h13a1 1 0 0 0 .9-1.5L18 12.2V9a6 6 0 0 0-6-6Zm0 18a2.5 2.5 0 0 0 2.4-2h-4.8A2.5 2.5 0 0 0 12 21Z"
-                  fill="currentColor"
-                />
-              </svg>
-              <span v-if="unreadCount > 0" class="nav__badge" aria-hidden="true">
-                {{ unreadCount > 99 ? '99+' : unreadCount }}
-              </span>
-              <span v-if="unreadCount > 0" class="visually-hidden">
-                有 {{ unreadCount }} 条未读通知
-              </span>
-            </button>
+            />
+            <span v-if="unreadCount > 0" class="nav__badge" aria-label="未读消息数">{{
+              unreadCount
+            }}</span>
 
             <div v-if="bellOpen" class="nav__bell-panel" role="dialog" aria-label="消息通知">
               <div class="nav__bell-head">
                 <strong>消息通知</strong>
-                <button
-                  v-if="unreadCount > 0"
+                <el-button
                   class="nav__bell-readall"
-                  type="button"
+                  link
+                  type="primary"
                   @click="readAllNotifications"
                 >
                   全部已读
-                </button>
+                </el-button>
               </div>
               <p v-if="bellLoading" class="nav__bell-empty">加载中…</p>
               <p v-else-if="notifications.length === 0" class="nav__bell-empty">暂无新消息</p>
-              <ul v-else class="nav__bell-list">
-                <li v-for="item in notifications" :key="item.id">
-                  <button
-                    class="nav__bell-item"
-                    :class="{ 'nav__bell-item--unread': !item.read }"
-                    type="button"
-                    @click="openNotification(item)"
-                  >
-                    <span class="nav__bell-title">{{ item.title }}</span>
-                    <span class="nav__bell-message">{{ item.message }}</span>
-                    <span class="nav__bell-time">{{ formatRelativeTime(item.created_at) }}</span>
-                  </button>
-                </li>
-              </ul>
+              <el-scrollbar v-else max-height="360px">
+                <ul class="nav__bell-list">
+                  <li v-for="item in notifications" :key="item.id">
+                    <el-button
+                      class="nav__bell-item"
+                      :class="{ 'nav__bell-item--unread': !item.read }"
+                      text
+                      @click="openNotification(item)"
+                    >
+                      <span class="nav__bell-title">{{ item.title }}</span>
+                      <span class="nav__bell-message">{{ item.message }}</span>
+                      <span class="nav__bell-time">{{ formatRelativeTime(item.created_at) }}</span>
+                    </el-button>
+                  </li>
+                </ul>
+              </el-scrollbar>
             </div>
           </div>
 
-          <div class="nav__user">
-            <button
-              class="nav__avatar-btn"
-              type="button"
-              :aria-expanded="menuOpen"
-              aria-haspopup="menu"
-              @click="menuOpen = !menuOpen"
-            >
-              <span class="nav__avatar" aria-hidden="true">{{ avatarText }}</span>
+          <el-dropdown trigger="click" :teleported="false" @command="handleUserCommand">
+            <span class="nav__avatar-btn" role="menu">
+              <el-avatar :size="28" class="nav__avatar">{{ avatarText }}</el-avatar>
               <span class="nav__name">{{ displayName }}</span>
-              <span class="nav__caret" aria-hidden="true">▾</span>
-            </button>
-
-            <div v-if="menuOpen" class="nav__menu" role="menu">
-              <button class="nav__menu-item" type="button" role="menuitem" @click="goProfile">
-                个人中心
-              </button>
-              <button class="nav__menu-item" type="button" role="menuitem" @click="handleLogout">
-                退出登录
-              </button>
-            </div>
-          </div>
+              <el-icon class="nav__caret"><ArrowDown /></el-icon>
+            </span>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="profile" class="nav__menu-item"
+                  >个人中心</el-dropdown-item
+                >
+                <el-dropdown-item command="logout" class="nav__menu-item" divided
+                  >退出登录</el-dropdown-item
+                >
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
       </header>
 
@@ -481,74 +384,30 @@ const isActive = (to: string): boolean =>
 }
 
 .side__menu {
-  display: grid;
-  gap: var(--space-1);
+  border-right: none;
+  background: transparent;
 }
 
-.side__link {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
+.side__menu :deep(.el-menu-item) {
+  height: 42px;
   border-radius: var(--radius-base);
   color: var(--color-text-secondary);
-  text-decoration: none;
-  font-size: var(--font-size-body);
-  white-space: nowrap;
-  overflow: hidden;
-  transition:
-    background var(--duration-base) var(--ease-out),
-    color var(--duration-base) var(--ease-out);
 }
 
-.side__link:hover {
+.side__menu :deep(.el-menu-item:hover) {
   background: var(--color-primary-bg);
   color: var(--color-primary-hover);
 }
 
-.side__link:active {
-  color: var(--color-primary-active);
-}
-
-.side__link--active {
+.side__menu :deep(.el-menu-item.is-active) {
   background: var(--color-primary-bg);
   color: var(--color-primary);
   font-weight: var(--font-weight-medium);
 }
 
-.side__icon {
-  display: inline-flex;
-  flex-shrink: 0;
-  line-height: 0;
-}
-
-.side--collapsed .side__link {
-  justify-content: center;
-  padding: var(--space-2);
-}
-
 .side__toggle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-1);
   margin-top: auto;
-  padding: var(--space-2);
-  border: 1px solid var(--color-split);
-  border-radius: var(--radius-base);
-  background: transparent;
-  color: var(--color-text-muted);
-  font-family: inherit;
-  font-size: var(--font-size-xs);
-  cursor: pointer;
-  transition:
-    color var(--duration-base) var(--ease-out),
-    border-color var(--duration-base) var(--ease-out);
-}
-
-.side__toggle:hover {
-  color: var(--color-primary);
-  border-color: var(--color-primary-hover);
+  width: 100%;
 }
 
 /* ── 主体 ───────────────────────────────────────────── */
@@ -581,55 +440,8 @@ const isActive = (to: string): boolean =>
 }
 
 .nav__search {
-  display: flex;
   flex: 1;
   max-width: 420px;
-  height: 32px;
-}
-
-.nav__search-input {
-  flex: 1;
-  min-width: 0;
-  padding: 0 var(--space-3);
-  border: 1px solid var(--color-border);
-  border-right: none;
-  border-radius: var(--radius-base) 0 0 var(--radius-base);
-  background: var(--color-bg);
-  color: inherit;
-  font-family: inherit;
-  font-size: var(--font-size-sm);
-  outline: none;
-  transition: border-color var(--duration-base) var(--ease-out);
-}
-
-.nav__search-input:hover {
-  border-color: var(--color-primary-hover);
-}
-
-.nav__search-input:focus {
-  border-color: var(--color-primary);
-}
-
-.nav__search-btn {
-  padding: 0 var(--space-3);
-  border: 1px solid var(--color-primary);
-  border-radius: 0 var(--radius-base) var(--radius-base) 0;
-  background: var(--color-primary);
-  color: var(--color-text-inverse);
-  font-family: inherit;
-  font-size: var(--font-size-sm);
-  cursor: pointer;
-  transition: background var(--duration-base) var(--ease-out);
-}
-
-.nav__search-btn:hover {
-  background: var(--color-primary-hover);
-  border-color: var(--color-primary-hover);
-}
-
-.nav__search-btn:active {
-  background: var(--color-primary-active);
-  border-color: var(--color-primary-active);
 }
 
 .nav__right {
@@ -646,60 +458,33 @@ const isActive = (to: string): boolean =>
 }
 
 .nav__bell {
-  position: relative;
-}
-
-.nav__bell-btn {
-  position: relative;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: none;
-  border-radius: var(--radius-base);
-  background: transparent;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  transition:
-    background var(--duration-base) var(--ease-out),
-    color var(--duration-base) var(--ease-out);
-}
-
-.nav__bell-btn:hover {
-  background: var(--color-bg-hover);
-  color: var(--color-primary);
+  position: relative;
 }
 
 .nav__badge {
   position: absolute;
-  top: 1px;
-  right: 0;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
-  border-radius: var(--radius-pill);
-  background: var(--color-error);
-  color: var(--color-text-inverse);
-  font-size: 10px;
-  line-height: 16px;
-  text-align: center;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 
 .nav__bell-panel {
   position: absolute;
-  top: calc(100% + var(--space-1));
+  top: calc(100% + var(--space-2));
   right: 0;
   width: 340px;
-  max-height: 420px;
-  overflow-y: auto;
-  padding: var(--space-1);
-  border: 1px solid var(--color-split);
-  border-radius: var(--radius-card);
   background: var(--color-bg);
-  box-shadow: var(--shadow-card-hover);
-  z-index: 20;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-modal);
+  z-index: 40;
 }
 
 .nav__bell-head {
@@ -709,19 +494,6 @@ const isActive = (to: string): boolean =>
   padding: var(--space-2) var(--space-3);
   border-bottom: 1px solid var(--color-split);
   font-size: var(--font-size-sm);
-}
-
-.nav__bell-readall {
-  border: none;
-  background: transparent;
-  color: var(--color-primary);
-  font-family: inherit;
-  font-size: var(--font-size-xs);
-  cursor: pointer;
-}
-
-.nav__bell-readall:hover {
-  color: var(--color-primary-hover);
 }
 
 .nav__bell-empty {
@@ -741,19 +513,12 @@ const isActive = (to: string): boolean =>
 .nav__bell-item {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 2px;
   width: 100%;
+  height: auto;
   padding: var(--space-2) var(--space-3);
-  border: none;
-  border-radius: var(--radius-base);
-  background: transparent;
-  font-family: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.nav__bell-item:hover {
-  background: var(--color-bg-hover);
+  white-space: normal;
 }
 
 .nav__bell-item--unread {
@@ -779,20 +544,13 @@ const isActive = (to: string): boolean =>
   font-size: var(--font-size-xs);
 }
 
-.nav__user {
-  position: relative;
-}
-
 .nav__avatar-btn {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-1) var(--space-2);
-  border: none;
   border-radius: var(--radius-base);
-  background: transparent;
   color: var(--color-text);
-  font-family: inherit;
   font-size: var(--font-size-sm);
   cursor: pointer;
   transition: background var(--duration-base) var(--ease-out);
@@ -803,12 +561,6 @@ const isActive = (to: string): boolean =>
 }
 
 .nav__avatar {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-pill);
   background: var(--color-primary);
   color: var(--color-text-inverse);
   font-size: var(--font-size-xs);
@@ -827,44 +579,6 @@ const isActive = (to: string): boolean =>
   font-size: 10px;
 }
 
-.nav__menu {
-  position: absolute;
-  top: calc(100% + var(--space-1));
-  right: 0;
-  min-width: 140px;
-  padding: var(--space-1);
-  border: 1px solid var(--color-split);
-  border-radius: var(--radius-card);
-  background: var(--color-bg);
-  box-shadow: var(--shadow-card-hover);
-  z-index: 20;
-}
-
-.nav__menu-item {
-  display: block;
-  width: 100%;
-  padding: var(--space-2) var(--space-3);
-  border: none;
-  border-radius: var(--radius-base);
-  background: transparent;
-  color: var(--color-text);
-  font-family: inherit;
-  font-size: var(--font-size-sm);
-  text-align: left;
-  cursor: pointer;
-  transition: background var(--duration-base) var(--ease-out);
-}
-
-.nav__menu-item:hover {
-  background: var(--color-primary-bg);
-  color: var(--color-primary-hover);
-}
-
-.nav__menu-item:active {
-  background: var(--color-primary-bg-hover);
-  color: var(--color-primary-active);
-}
-
 .content {
   flex: 1;
   padding: var(--space-6);
@@ -875,8 +589,7 @@ const isActive = (to: string): boolean =>
     width: var(--layout-sidebar-collapsed-width);
   }
 
-  .side__name,
-  .side__label {
+  .side__name {
     display: none !important;
   }
 

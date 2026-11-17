@@ -1,28 +1,31 @@
 <script setup lang="ts">
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 const route = useRoute()
+const router = useRouter()
 </script>
 
 <template>
   <section class="nf">
-    <h1>404</h1>
-    <p>
-      找不到页面：<code>{{ route.fullPath }}</code>
-    </p>
-    <RouterLink to="/">← 回首页</RouterLink>
+    <el-result icon="info" title="404" sub-title="找不到页面">
+      <template #extra>
+        <p class="nf__path">
+          <code>{{ route.fullPath }}</code>
+        </p>
+        <el-button type="primary" @click="router.push('/')">回首页</el-button>
+      </template>
+    </el-result>
   </section>
 </template>
 
 <style scoped>
 .nf {
+  padding: var(--space-10) var(--space-4);
   text-align: center;
-  padding: 3rem 0;
 }
 
-.nf h1 {
-  font-size: 4rem;
-  margin-bottom: 0.3rem;
-  color: #3b82f6;
+.nf__path {
+  margin: 0 0 var(--space-3);
+  color: var(--color-text-muted);
 }
 </style>

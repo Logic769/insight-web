@@ -65,7 +65,7 @@ async function mountAdmin() {
 }
 
 async function clickTab(wrapper: Awaited<ReturnType<typeof mountAdmin>>, index: number) {
-  await wrapper.findAll('.tabs__item')[index].trigger('click')
+  await wrapper.findAll('.el-tabs__item')[index].trigger('click')
   await flushPromises()
 }
 
@@ -109,11 +109,17 @@ describe('AdminView Tab 状态隔离', () => {
     const wrapper = await mountAdmin()
 
     await clickTab(wrapper, 1)
-    await wrapper.get('.btn--primary').trigger('click')
-    const inputs = wrapper.findAll('.modal input.input')
+    await wrapper
+      .findAll('button')
+      .find((node) => node.text() === '新增站点')!
+      .trigger('click')
+    const inputs = wrapper.findAll('.el-dialog input')
     await inputs[0].setValue('测试站点')
     await inputs[1].setValue('https://example.com/news')
-    await wrapper.findAll('.modal .btn')[1].trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((node) => node.text() === '保存')!
+      .trigger('click')
     await flushPromises()
 
     await clickTab(wrapper, 2)
@@ -121,7 +127,7 @@ describe('AdminView Tab 状态隔离', () => {
     await flushPromises()
 
     expect(wrapper.find('.notice--error').exists()).toBe(false)
-    expect(wrapper.find('.tabs__item--active').text()).toBe('账号管理')
+    expect(wrapper.find('.el-tabs__item.is-active').text()).toBe('账号管理')
   })
 
   it('站点编辑以 name 为主键提交 XPath 与渲染开关', async () => {
@@ -146,16 +152,16 @@ describe('AdminView Tab 状态隔离', () => {
 
     await clickTab(wrapper, 1)
     await wrapper
-      .findAll('.btn--text')
+      .findAll('button')
       .find((node) => node.text() === '编辑')!
       .trigger('click')
-    const inputs = wrapper.findAll('.modal input.input')
+    const inputs = wrapper.findAll('.el-dialog input')
     expect((inputs[0].element as HTMLInputElement).disabled).toBe(true)
     expect((inputs[5].element as HTMLInputElement).value).toBe('//li')
     await inputs[5].setValue('//article')
-    const checks = wrapper.findAll('.modal input[type="checkbox"]')
+    const checks = wrapper.findAll('.el-dialog input[type="checkbox"]')
     await checks[0].setValue(true)
-    await wrapper.findAll('.modal .btn--primary')[0].trigger('click')
+    await wrapper.findAll('.el-dialog .el-button--primary')[0].trigger('click')
     await flushPromises()
 
     expect(adminApi.updateAdminSite).toHaveBeenCalledWith(
@@ -188,14 +194,15 @@ describe('AdminView Tab 状态隔离', () => {
 
     await clickTab(wrapper, 1)
     await wrapper
-      .findAll('.btn--text')
+      .findAll('button')
       .find((node) => node.text() === '编辑')!
       .trigger('click')
     expect(wrapper.text()).toContain('由接口配置维护')
-    await wrapper.findAll('.modal .btn--primary')[0].trigger('click')
+    await wrapper.findAll('.el-dialog .el-button--primary')[0].trigger('click')
     await flushPromises()
+    await new Promise((resolve) => setTimeout(resolve, 350))
 
-    expect(wrapper.find('.modal').exists()).toBe(false)
+    expect(wrapper.find('.el-dialog').exists()).toBe(false)
     expect(adminApi.updateAdminSite).toHaveBeenCalledWith(
       'shpolicy_ssme',
       expect.objectContaining({ category: 'funding_subsidy', enabled: true }),
@@ -309,9 +316,9 @@ describe('AdminView Tab 状态隔离', () => {
     )
     expect(wrapper.text()).toContain('第 1 / 3 页 · 共 25 个账号')
 
-    const next = wrapper.findAll('button').find((button) => button.text() === '下一页')
-    expect(next).toBeTruthy()
-    await next!.trigger('click')
+    const next = wrapper.find('.admin-pager--users .btn-next')
+    expect(next.exists()).toBe(true)
+    await next.trigger('click')
     await flushPromises()
     expect(adminApi.listAdminUsers).toHaveBeenLastCalledWith(
       expect.objectContaining({ limit: 10, offset: 10 }),

@@ -6,4 +6,6 @@ coverage
 .gitignore
 *.log
 *.local
+# 生产构建需要 .env.production；本地的 *.local 仍排除，避免密钥进入镜像
 .env*
+!.env.production

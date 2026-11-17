@@ -545,7 +545,6 @@ watch(
       width="720px"
       align-center
       class="checklist-dialog"
-      :teleported="false"
       :show-close="false"
     >
       <template #header>

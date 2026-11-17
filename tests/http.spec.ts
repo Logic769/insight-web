@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-const { requestMock } = vi.hoisted(() => ({ requestMock: vi.fn() }))
+const { requestMock } = vi.hoisted(() => ({
+  requestMock: vi.fn(),
+}))
 
 vi.mock('axios', () => {
   const instance = {
@@ -20,7 +22,14 @@ vi.mock('axios', () => {
   }
 })
 
-import { http, HttpError, pendingRequests, request } from '@/api/http'
+import {
+  applyAuthHeader,
+  http,
+  HttpError,
+  pendingRequests,
+  request,
+  setAuthToken,
+} from '@/api/http'
 
 function okEnvelope(data: unknown, meta?: Record<string, unknown>) {
   return {
@@ -41,6 +50,17 @@ function failedResponse(status: number, msg: string) {
 describe('http 重试策略', () => {
   afterEach(() => {
     requestMock.mockReset()
+    setAuthToken('')
+  })
+
+  it('请求拦截器注入 Authorization，未登录时保持空', () => {
+    setAuthToken('token-1')
+    const authenticated = applyAuthHeader({ headers: {} })
+    expect(authenticated.headers.Authorization).toBe('Bearer token-1')
+
+    setAuthToken('')
+    const anonymous = applyAuthHeader({ headers: {} })
+    expect(anonymous.headers.Authorization).toBeUndefined()
   })
 
   it('GET 遇到 503 会重试两次，共请求三次', async () => {
@@ -104,5 +124,51 @@ describe('http 重试策略', () => {
       message: '请求已取消',
     })
     expect(requestMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('飞行中取消会传递 signal，并抛取消错误', async () => {
+    let rejectRequest: (error: unknown) => void = () => {}
+    requestMock.mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectRequest = reject
+        }),
+    )
+    const controller = new AbortController()
+    const pending = http.get('/v1/tags', { signal: controller.signal })
+
+    await Promise.resolve()
+    expect(requestMock.mock.calls[0][0].signal).toBe(controller.signal)
+
+    controller.abort()
+    rejectRequest({ isAxiosError: true, code: 'ERR_CANCELED' })
+    await expect(pending).rejects.toMatchObject({ status: 0, message: '请求已取消' })
+    expect(requestMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('超时错误映射为 HttpError(0)，GET 默认会重试', async () => {
+    requestMock.mockRejectedValue({ isAxiosError: true, code: 'ECONNABORTED' })
+
+    await expect(http.get('/v1/tags', { retries: 0 })).rejects.toMatchObject({
+      status: 0,
+      message: expect.stringContaining('请求超时'),
+    })
+  })
+
+  it('GET 网络错误会重试两次，共请求三次', async () => {
+    requestMock.mockRejectedValue({ isAxiosError: true, code: 'ERR_NETWORK' })
+
+    await expect(http.get('/v1/tags')).rejects.toBeInstanceOf(HttpError)
+    expect(requestMock).toHaveBeenCalledTimes(3)
+  })
+
+  it('401 会广播 unauthorized 事件', async () => {
+    const listener = vi.fn()
+    window.addEventListener('insight:unauthorized', listener)
+    requestMock.mockRejectedValue(failedResponse(401, ''))
+
+    await expect(http.get('/v1/articles')).rejects.toMatchObject({ status: 401 })
+    expect(listener).toHaveBeenCalledTimes(1)
+    window.removeEventListener('insight:unauthorized', listener)
   })
 })

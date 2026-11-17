@@ -44,6 +44,10 @@ describe('resolveRange', () => {
     expect(range).toEqual({ from: '2026-09-01', to: '2026-10-31' })
   })
 
+  it('日期框清空回传 null 时归一为空串，不抛 trim 错误', () => {
+    expect(resolveRange('custom', null, null, now)).toEqual({ from: '', to: '' })
+  })
+
   it('跨月时开始日期正确回退', () => {
     // 2026-11-03 往前数 6 天要落到 10 月，不能变成 11-31 这种非法值
     const range = resolveRange('7d', '', '', new Date(2026, 10, 3, 9, 0))

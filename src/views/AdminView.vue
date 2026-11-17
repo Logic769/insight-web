@@ -396,6 +396,7 @@ async function submitUser(): Promise<void> {
       ...(userForm.value.password ? { password: userForm.value.password } : {}),
     })
     tempPassword.value = created.temporary_password ?? ''
+    userModalOpen.value = false
     flash(tempPassword.value ? '账号已创建，请把临时密码交给用户' : '账号已创建')
     await loadUsers()
   } catch (err) {
@@ -549,7 +550,6 @@ onMounted(() => {
       class="notice notice--error"
     />
     <p v-if="loading" class="notice muted">加载中…</p>
-    <el-skeleton v-if="loading" :rows="4" animated class="notice" />
 
     <!-- 统计看板 -->
     <div v-if="activeTab === 'stats'" class="panel">
@@ -796,7 +796,6 @@ onMounted(() => {
       :title="editingSiteName === null ? '新增站点' : '编辑站点'"
       width="620px"
       destroy-on-close
-      :teleported="false"
     >
       <el-form label-position="top" class="form">
         <el-form-item label="名称">
@@ -848,13 +847,7 @@ onMounted(() => {
     </el-dialog>
 
     <!-- 账号新增弹窗 -->
-    <el-dialog
-      v-model="userModalOpen"
-      title="新增账号"
-      width="460px"
-      destroy-on-close
-      :teleported="false"
-    >
+    <el-dialog v-model="userModalOpen" title="新增账号" width="460px" destroy-on-close>
       <el-form label-position="top" class="form">
         <el-form-item label="用户名">
           <el-input v-model="userForm.username" autocomplete="off" />

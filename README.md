@@ -49,7 +49,7 @@ Nginx 负责 Gzip、`/assets` 一年 immutable 缓存、SPA history 回退，并
 
 | 组件 | 版本 | 说明 |
 |---|---|---|
-| Node.js | v26.13.1 | 运行时 |
+| Node.js | 22（生产镜像）/ 26.13.1（本机验证） | 运行时 |
 | Vue | 3.5.45 | 框架 |
 | TypeScript | 6.0.3 | 类型系统 |
 | Vite | 8.3.8 | 构建工具（底层 Rolldown） |

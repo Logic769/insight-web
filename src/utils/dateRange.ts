@@ -52,12 +52,15 @@ export function localDayString(date: Date): string {
  */
 export function resolveRange(
   range: TimeRange,
-  customFrom = '',
-  customTo = '',
+  customFrom: string | null = '',
+  customTo: string | null = '',
   now: Date = new Date(),
 ): DateRange {
   if (range === 'all') return { from: '', to: '' }
-  if (range === 'custom') return { from: customFrom.trim(), to: customTo.trim() }
+  if (range === 'custom') {
+    // Element Plus 的日期框清空时回传 null，不是空串；这里统一归一，避免 trim 崩溃。
+    return { from: (customFrom ?? '').trim(), to: (customTo ?? '').trim() }
+  }
   const days = range === '7d' ? 7 : 30
   const end = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1))

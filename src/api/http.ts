@@ -93,10 +93,13 @@ const client = axios.create({
 })
 
 // 请求拦截：自动注入 Token（未登录时为空，登录页本身不受影响）。
-client.interceptors.request.use((config) => {
+// 导出成纯函数，测试可以直接验证请求头，不用模拟 Axios 的拦截器链。
+export function applyAuthHeader<T extends { headers: Record<string, unknown> }>(config: T): T {
   if (authToken) config.headers.Authorization = `Bearer ${authToken}`
   return config
-})
+}
+
+client.interceptors.request.use(applyAuthHeader)
 
 function describeStatus(status: number, statusText: string, detail: string): string {
   const hint =

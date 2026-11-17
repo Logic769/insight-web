@@ -107,8 +107,8 @@ const selectedSources = ref<string[]>([])
 /** /v1/articles 的 industry 是单值参数，所以这里也用单选 */
 const selectedIndustry = ref('')
 const timeRange = ref<TimeRange>('all')
-const customFrom = ref('')
-const customTo = ref('')
+const customFrom = ref<string | null>('')
+const customTo = ref<string | null>('')
 const sort = ref<ArticleSort>('published_desc')
 const page = ref(1)
 const pageSize = ref(DEFAULT_PAGE_SIZE)
@@ -556,6 +556,8 @@ onMounted(() => {
         v-for="tab in TABS"
         :key="tab.key"
         class="tab"
+        role="tab"
+        :aria-selected="activeTabKey === tab.key"
         :class="{ 'tab--active': activeTabKey === tab.key }"
         :type="activeTabKey === tab.key ? 'primary' : 'default'"
         @click="setTab(tab)"

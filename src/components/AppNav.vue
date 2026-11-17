@@ -322,12 +322,12 @@ onBeforeUnmount(() => {
             </span>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item command="profile" class="nav__menu-item"
-                  >个人中心</el-dropdown-item
-                >
-                <el-dropdown-item command="logout" class="nav__menu-item" divided
-                  >退出登录</el-dropdown-item
-                >
+                <el-dropdown-item command="profile" class="nav__menu-item">
+                  个人中心
+                </el-dropdown-item>
+                <el-dropdown-item command="logout" class="nav__menu-item" divided>
+                  退出登录
+                </el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
@@ -465,14 +465,18 @@ onBeforeUnmount(() => {
 
 .nav__badge {
   position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip-path: inset(50%);
+  top: 1px;
+  right: 0;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: var(--radius-pill);
+  background: var(--color-error);
+  color: var(--color-text-inverse);
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
   white-space: nowrap;
-  border: 0;
 }
 
 .nav__bell-panel {

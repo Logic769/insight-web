@@ -120,8 +120,8 @@ const suggestIndex = ref(-1)
 const advOpen = ref(false)
 
 const timeRange = ref<TimeRange>('all')
-const customFrom = ref('')
-const customTo = ref('')
+const customFrom = ref<string | null>('')
+const customTo = ref<string | null>('')
 /** 浏览模式只允许一个大类时的提示；有内容就显示在分类筛选下面 */
 const categoryHint = ref('')
 const sort = ref<SearchSort>('relevance')
@@ -392,6 +392,8 @@ interface RouteState {
   high: boolean
   /** 页码（1 起）；只有服务端分页的浏览模式真正用它定位数据 */
   page: number
+  /** 每页条数；写进 URL 才能分享/刷新后保持同一页大小 */
+  size: number
   /** 时间范围的语义（快捷项 / 自定义），与 from、to 一起还原才不会被「猜」成自定义 */
   range: TimeRange
 }
@@ -415,6 +417,8 @@ function stateFromRoute(): RouteState {
   const high = route.query.high === '1'
   const pageRaw = typeof route.query.page === 'string' ? Number(route.query.page) : 1
   const nextPage = Number.isInteger(pageRaw) && pageRaw >= 1 ? pageRaw : 1
+  const sizeRaw = Number(route.query.size)
+  const nextSize = PAGE_SIZE_OPTIONS.includes(sizeRaw) ? sizeRaw : 10
   return {
     q,
     cats,
@@ -425,6 +429,7 @@ function stateFromRoute(): RouteState {
     sort: nextSort,
     high,
     page: nextPage,
+    size: nextSize,
     range: rangeFromRoute(),
   }
 }
@@ -459,6 +464,8 @@ function queryOf(state: RouteState): Record<string, string | string[] | undefine
     high: state.high ? '1' : undefined,
     // 第 1 页不写进 URL：保持链接干净，且「第 1 页」与「没翻过页」本来就是同一状态
     page: state.page > 1 ? String(state.page) : undefined,
+    // 默认 10 条不写，非默认值写进 URL；刷新/分享后保持同一页大小
+    size: state.size === 10 ? undefined : String(state.size),
     // 时间范围的语义要连同 from/to 一起记：只写日期的话，用户先点「自定义」、还没填
     // 日期时刷新会被还原成「全部时间」，输入框直接消失。
     //
@@ -484,6 +491,7 @@ function currentState(): RouteState {
     sort: effectiveSort.value,
     high: highRelevanceOnly.value,
     page: page.value,
+    size: pageSize.value,
     range: timeRange.value,
   }
 }
@@ -622,6 +630,7 @@ function applyFromRoute(): void {
     customFrom.value = ''
     customTo.value = ''
   }
+  pageSize.value = state.size
   page.value = state.page
   if (rangeInvalid.value) {
     // 手改 URL 造出倒置区间：不发请求（后端会返回空集，用户会以为真没数据），

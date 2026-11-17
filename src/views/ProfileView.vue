@@ -10,6 +10,8 @@
  */
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+// 显式 import 不会被 ElementPlusResolver 注入样式，必须手动引入 message 的 CSS。
+import 'element-plus/es/components/message/style/css'
 import { useAuthStore } from '@/stores/auth'
 import { categoryName } from '@/constants/categories'
 import { formatDateTime, formatRelativeTime } from '@/utils/format'
@@ -161,7 +163,8 @@ const FIELD_OPTIONS = [
 interface PreferencesForm {
   fields: string[]
   notifyEnabled: boolean
-  notifyTime: string
+  // el-time-picker 清空时回传 null，不是空串
+  notifyTime: string | null
 }
 
 const preferences = ref<PreferencesForm>({
@@ -199,7 +202,7 @@ async function savePreferences(): Promise<void> {
     const saved = await savePreferencesApi({
       industries: [...preferences.value.fields],
       push_enabled: preferences.value.notifyEnabled,
-      digest_time: preferences.value.notifyTime,
+      digest_time: preferences.value.notifyTime ?? '',
     })
     applyPreferences(saved)
     flash('设置已保存，已即时生效')

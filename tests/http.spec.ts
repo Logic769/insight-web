@@ -146,7 +146,7 @@ describe('http 重试策略', () => {
     expect(requestMock).toHaveBeenCalledTimes(1)
   })
 
-  it('超时错误映射为 HttpError(0)，GET 默认会重试', async () => {
+  it('超时错误映射为 HttpError(0)，retries=0 时不重试', async () => {
     requestMock.mockRejectedValue({ isAxiosError: true, code: 'ECONNABORTED' })
 
     await expect(http.get('/v1/tags', { retries: 0 })).rejects.toMatchObject({

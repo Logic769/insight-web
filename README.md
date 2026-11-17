@@ -114,7 +114,7 @@ insight-web/
 │   └── favicon.svg
 ├── src/
 │   ├── api/
-│   │   ├── http.ts           # fetch 封装：类型化、超时、统一错误
+│   │   ├── http.ts           # Axios 封装：Token 注入、{code,msg,data} 解包、超时与重试
 │   │   ├── category.ts       # 分类词表与统计（/v1/categories、/v1/categories/stats）
 │   │   ├── articles.ts       # 文章列表（/v1/articles，支持按大类/标签过滤）
 │   │   ├── search.ts         # 检索（/v1/search）

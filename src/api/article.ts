@@ -23,11 +23,19 @@ export interface ArticleDetail {
   published_at_utc: string | null
   content_length: number
   body: string | null
+  /** 清洗后的正文 HTML（后端白名单过滤），缺失时前端用 MarkdownIt 渲染纯文本回退 */
+  body_html?: string | null
+  /** 当前登录用户是否已收藏；未登录时为 false */
+  is_favorite?: boolean
   category: string | null
   category_confidence: number | null
   category_engine: string | null
   tag_engine: string | null
   extract_engine: string | null
+  /** 文章级语义相关度（0-1），详情页展示与摘要判断使用 */
+  relevance_score?: number | null
+  relevance_engine?: string | null
+  relevance_reason?: string | null
   analyzed_at: string
   tags: ArticleTag[]
   extractions: Record<string, Record<string, ExtractionField>>
@@ -77,4 +85,19 @@ export async function getChecklist(articleId: string): Promise<ArticleChecklist 
     }
     throw error
   }
+}
+
+/**
+ * POST /v1/articles/{article_id}/checklist —— 按需生成申报准备清单
+ * force=false 时后端复用已有清单（幂等）；force=true 才重新生成。
+ */
+export async function generateChecklist(
+  articleId: string,
+  force = false,
+): Promise<ArticleChecklist> {
+  const res = await http.post<ApiEnvelope<ArticleChecklist>>(
+    `/v1/articles/${encodeURIComponent(articleId)}/checklist`,
+    { force },
+  )
+  return res.data
 }

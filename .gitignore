@@ -1,6 +1,7 @@
 node_modules
 dist
 dist-ssr
+coverage
 *.local
 .DS_Store
 *.log
@@ -9,3 +10,5 @@ dist-ssr
 !.vscode/settings.json
 !.vscode/launch.json
 !.vscode/tasks.json
+deploy/certs/*.pem
+deploy/certs/*.key

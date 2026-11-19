@@ -1,194 +1,250 @@
 <script setup lang="ts">
 /**
- * 登录页：当前是纯前端校验的示范实现（测试账号见 stores/auth.ts）。
- * 接入后端时，把 auth.login 换成接口调用即可。
+ * 登录页（Element Plus 版）。
+ * 规范 2.2.1（二）模块一：账号密码表单、必填与密码长度校验、回车提交、
+ * 连续 5 次失败锁定 15 分钟、密码显示/隐藏切换、登录框居中渐变背景。
  */
-import { ref } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
+import type { FormInstance, FormRules } from 'element-plus'
+import { Lock, User } from '@element-plus/icons-vue'
+import { useAuthStore, LOCK_DURATION_MS, MAX_LOGIN_ATTEMPTS } from '@/stores/auth'
 
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
 
-const username = ref('')
-const password = ref('')
-const error = ref('')
+const formRef = ref<FormInstance>()
+const form = reactive({ username: '', password: '' })
+const submitting = ref(false)
+const formError = ref('')
 
-function handleSubmit(): void {
-  error.value = ''
+/** 锁定倒计时：每秒刷新一次，锁过期后自动消失 */
+const now = ref(Date.now())
+let timer: ReturnType<typeof setInterval> | null = null
 
-  if (!username.value.trim()) {
-    error.value = '请输入用户名'
-    return
-  }
-  if (!password.value) {
-    error.value = '请输入密码'
-    return
-  }
-
-  const result = auth.login(username.value, password.value)
-  if (!result.ok) {
-    error.value = result.message
-    return
-  }
-
-  // 登录前想去的页面（由路由守卫塞进 query），没有就回首页
-  const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/'
-  router.replace(redirect)
+function startTimer(): void {
+  if (timer !== null) return
+  timer = setInterval(() => {
+    now.value = Date.now()
+  }, 1000)
 }
+
+function stopTimer(): void {
+  if (timer !== null) {
+    clearInterval(timer)
+    timer = null
+  }
+}
+
+const lockRemaining = computed(() => {
+  void now.value
+  return auth.isLocked ? auth.lockRemainingSeconds : 0
+})
+const lockMinutes = computed(() => Math.ceil(lockRemaining.value / 60))
+
+const rules: FormRules = {
+  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
+  password: [
+    { required: true, message: '请输入密码', trigger: 'blur' },
+    { min: 6, message: '密码长度不能少于 6 位', trigger: 'blur' },
+  ],
+}
+
+async function handleSubmit(): Promise<void> {
+  formError.value = ''
+  if (auth.isLocked) {
+    formError.value = `账号已临时锁定，请 ${lockMinutes.value} 分钟后再试`
+    return
+  }
+  const valid = await formRef.value?.validate().catch(() => false)
+  if (!valid) return
+
+  submitting.value = true
+  try {
+    const result = await auth.login(form.username, form.password)
+    if (!result.ok) {
+      formError.value = result.message
+      if (result.reason === 'locked') startTimer()
+      return
+    }
+    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/'
+    router.replace(redirect)
+  } catch (error) {
+    formError.value =
+      error instanceof Error ? `网络异常：${error.message}` : '网络异常，请检查网络后重试'
+  } finally {
+    submitting.value = false
+  }
+}
+
+// 锁定期间启动倒计时，解锁后自动停掉
+watch(
+  lockRemaining,
+  (value) => {
+    if (value > 0) startTimer()
+    else stopTimer()
+  },
+  { immediate: true },
+)
+
+onBeforeUnmount(stopTimer)
 </script>
 
 <template>
   <div class="login">
-    <div class="login__card">
+    <el-card class="login__card" shadow="always">
       <header class="login__head">
-        <span class="login__logo" aria-hidden="true">🐟</span>
-        <h1 class="login__title">登录</h1>
-        <p class="login__subtitle">请先登录，再进入平台</p>
+        <span class="login__logo" aria-hidden="true">
+          <svg viewBox="0 0 48 48" width="44" height="44">
+            <rect x="4" y="8" width="40" height="32" rx="6" fill="var(--color-primary)" />
+            <rect x="10" y="16" width="20" height="3" rx="1.5" fill="#ffffff" opacity="0.9" />
+            <rect x="10" y="23" width="28" height="3" rx="1.5" fill="#ffffff" opacity="0.65" />
+            <rect x="10" y="30" width="14" height="3" rx="1.5" fill="#ffffff" opacity="0.45" />
+          </svg>
+        </span>
+        <h1 class="login__title">政策情报与项目申报智能助手</h1>
+        <p class="login__subtitle">请登录后进入系统</p>
       </header>
 
-      <form class="login__form" @submit.prevent="handleSubmit">
-        <label class="field">
-          <span class="field__label">用户名</span>
-          <input
-            v-model="username"
-            class="field__input"
-            type="text"
-            name="username"
-            autocomplete="username"
+      <el-form
+        ref="formRef"
+        class="login__form"
+        :model="form"
+        :rules="rules"
+        label-position="top"
+        @submit.prevent="handleSubmit"
+      >
+        <el-form-item label="用户名" prop="username">
+          <el-input
+            id="login-username"
+            v-model="form.username"
+            :prefix-icon="User"
             placeholder="请输入用户名"
+            autocomplete="username"
           />
-        </label>
+        </el-form-item>
 
-        <label class="field">
-          <span class="field__label">密码</span>
-          <input
-            v-model="password"
-            class="field__input"
+        <el-form-item label="密码" prop="password">
+          <el-input
+            id="login-password"
+            v-model="form.password"
+            :prefix-icon="Lock"
             type="password"
-            name="password"
+            show-password
+            placeholder="请输入密码（不少于 6 位）"
             autocomplete="current-password"
-            placeholder="请输入密码"
           />
-        </label>
+        </el-form-item>
 
-        <p v-if="error" class="login__error" role="alert">{{ error }}</p>
+        <el-alert
+          v-if="lockRemaining > 0"
+          type="warning"
+          :closable="false"
+          show-icon
+          :title="`连续 ${MAX_LOGIN_ATTEMPTS} 次登录失败，账号已锁定，请 ${lockMinutes} 分钟后再试`"
+        />
+        <el-alert
+          v-else-if="formError"
+          type="error"
+          :closable="false"
+          show-icon
+          :title="formError"
+        />
 
-        <button class="login__submit" type="submit">登 录</button>
-      </form>
+        <el-button
+          class="login__submit"
+          type="primary"
+          native-type="submit"
+          :loading="submitting"
+          :disabled="lockRemaining > 0"
+        >
+          {{ submitting ? '登录中…' : '登 录' }}
+        </el-button>
+      </el-form>
 
-      <p class="login__hint">演示环境 · 测试账号 <code>test</code></p>
-    </div>
+      <p class="login__hint">
+        请使用管理员分配的账号登录
+        <span class="login__lock-note">
+          （连续 {{ MAX_LOGIN_ATTEMPTS }} 次失败将锁定 {{ LOCK_DURATION_MS / 60000 }} 分钟）
+        </span>
+      </p>
+    </el-card>
   </div>
 </template>
 
 <style scoped>
+/* 规范模块一（6）：登录框居中、背景渐变 */
 .login {
   min-height: 100vh;
   display: grid;
   place-items: center;
-  padding: 2rem 1.2rem;
+  padding: var(--space-6) var(--space-4);
+  background:
+    radial-gradient(circle at 15% 20%, rgb(24, 144, 255, 0.16), transparent 45%),
+    radial-gradient(circle at 85% 75%, rgb(105, 192, 255, 0.2), transparent 50%),
+    linear-gradient(135deg, #f0f7ff 0%, #e6f4ff 45%, #f5f9ff 100%);
 }
 
 .login__card {
   width: 100%;
-  max-width: 380px;
-  padding: 2.4rem 2rem 1.8rem;
-  border: 1px solid var(--border);
-  border-radius: 18px;
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
-  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
+  max-width: 400px;
+  border-radius: var(--radius-modal);
+  box-shadow: var(--shadow-modal);
+}
+
+.login__card :deep(.el-card__body) {
+  padding: var(--space-8) var(--space-6) var(--space-4);
 }
 
 .login__head {
+  margin-bottom: var(--space-6);
   text-align: center;
-  margin-bottom: 1.8rem;
 }
 
 .login__logo {
-  font-size: 2rem;
-  line-height: 1;
+  display: inline-flex;
+  line-height: 0;
 }
 
 .login__title {
-  margin: 0.6rem 0 0.35rem;
-  font-size: 1.45rem;
+  margin: var(--space-3) 0 var(--space-1);
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
 }
 
 .login__subtitle {
   margin: 0;
-  color: var(--muted);
-  font-size: 0.88rem;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
 }
 
 .login__form {
   display: grid;
-  gap: 1rem;
+  gap: var(--space-3);
 }
 
-.field {
-  display: grid;
-  gap: 0.4rem;
-}
-
-.field__label {
-  font-size: 0.84rem;
-  color: var(--muted);
-}
-
-.field__input {
-  width: 100%;
-  padding: 0.62rem 0.85rem;
-  border: 1.5px solid var(--border);
-  border-radius: 10px;
-  background: transparent;
-  color: inherit;
-  font-size: 0.95rem;
-  font-family: inherit;
-  outline: none;
-  transition:
-    border-color 0.18s ease,
-    box-shadow 0.18s ease;
-}
-
-.field__input:focus {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
-}
-
-.login__error {
-  margin: 0;
-  padding: 0.55rem 0.8rem;
-  border-radius: 8px;
-  background: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
-  font-size: 0.84rem;
+.login__form :deep(.el-form-item) {
+  margin-bottom: 0;
 }
 
 .login__submit {
-  margin-top: 0.3rem;
-  padding: 0.68rem;
-  border: none;
-  border-radius: 10px;
-  background: #3b82f6;
-  color: #fff;
-  font-size: 0.98rem;
-  font-weight: 500;
-  font-family: inherit;
-  letter-spacing: 0.1em;
-  cursor: pointer;
-  transition: background 0.18s ease;
-}
-
-.login__submit:hover {
-  background: #2563eb;
+  width: 100%;
+  height: 40px;
+  letter-spacing: 0.08em;
 }
 
 .login__hint {
-  margin: 1.4rem 0 0;
+  margin: var(--space-4) 0 0;
   text-align: center;
-  color: var(--muted);
-  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.login__lock-note {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--color-text-disabled);
 }
 </style>

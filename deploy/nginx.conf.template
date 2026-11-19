@@ -1,0 +1,97 @@
+# 由官方 nginx 镜像的 envsubst 在容器启动时渲染：
+# ${SERVER_NAME}、${INSIGHT_API_KEY} 来自 compose 环境变量，其余 $host/$uri 等由 Nginx 运行时解析。
+server {
+    listen 80 default_server;
+    server_name ${SERVER_NAME};
+
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name ${SERVER_NAME};
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    ssl_certificate /etc/nginx/certs/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-Frame-Options SAMEORIGIN always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+
+    gzip on;
+    gzip_vary on;
+    gzip_comp_level 6;
+    gzip_min_length 1024;
+    gzip_types text/plain text/css application/javascript application/json image/svg+xml font/woff2;
+
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        # location 里出现 add_header 后不再继承 server 级安全头，必须重复声明
+        add_header X-Content-Type-Options nosniff always;
+        add_header X-Frame-Options SAMEORIGIN always;
+        add_header Referrer-Policy strict-origin-when-cross-origin always;
+        try_files $uri =404;
+    }
+
+    location = /index.html {
+        add_header Cache-Control "no-cache";
+        add_header X-Content-Type-Options nosniff always;
+        add_header X-Frame-Options SAMEORIGIN always;
+        add_header Referrer-Policy strict-origin-when-cross-origin always;
+    }
+
+    # 公网子路径：远程 Nginx 保留 /insight/ 前缀转发到本机，这里把 /insight/api/ 转给后端。
+    location ^~ /insight/api/ {
+        proxy_pass http://news-insight:8020/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-API-Key "${INSIGHT_API_KEY}";
+        proxy_read_timeout 60s;
+    }
+
+    location ^~ /insight/assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        add_header X-Content-Type-Options nosniff always;
+        add_header X-Frame-Options SAMEORIGIN always;
+        add_header Referrer-Policy strict-origin-when-cross-origin always;
+        try_files $uri =404;
+    }
+
+    location = /insight/index.html {
+        add_header Cache-Control "no-cache";
+        add_header X-Content-Type-Options nosniff always;
+        add_header X-Frame-Options SAMEORIGIN always;
+        add_header Referrer-Policy strict-origin-when-cross-origin always;
+    }
+
+    location /insight/ {
+        try_files $uri $uri/ /insight/index.html;
+    }
+
+    location /api/ {
+        proxy_pass http://news-insight:8020/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-API-Key "${INSIGHT_API_KEY}";
+        proxy_read_timeout 60s;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

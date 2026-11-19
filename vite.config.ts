@@ -15,6 +15,8 @@ export default defineConfig(({ mode }) => {
   const apiKey = env.INSIGHT_API_KEY || ''
 
   return {
+    // 部署到子路径（如 https://logic769.xyz/insight/）时由构建参数注入；默认根路径。
+    base: env.VITE_BASE || '/',
     plugins: [
       vue(),
       // Element Plus 按需引入：模板里的 <el-*> 与脚本里的 ElMessage 自动导入，样式随组件注入。

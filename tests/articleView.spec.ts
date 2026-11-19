@@ -139,7 +139,7 @@ describe('ArticleView 关键要素', () => {
     getArticle.mockResolvedValue(
       detail({
         extractions: {
-          project: {
+          project_application: {
             program_name: {
               value: '科技型中小企业技术创新项目',
               raw_text: '科技型中小企业技术创新项目',
@@ -169,7 +169,7 @@ describe('ArticleView 关键要素', () => {
     getArticle.mockResolvedValue(
       detail({
         extractions: {
-          project: {
+          project_application: {
             deadline: {
               value: '2026-12-31',
               raw_text: '截止2026年12月31日',
@@ -181,9 +181,73 @@ describe('ArticleView 关键要素', () => {
       }),
     )
     const wrapper = await mountView()
-    expect(wrapper.find('.field__value').text()).toContain('2026-12-31')
-    expect(wrapper.find('.field__value').text()).toContain('待核验')
-    expect(wrapper.find('.field__empty').exists()).toBe(false)
+    const deadlineValue = wrapper
+      .findAll('.field__value')
+      .find((node) => node.text().includes('2026-12-31'))
+    expect(deadlineValue).toBeTruthy()
+    expect(deadlineValue!.text()).toContain('待核验')
+    expect(deadlineValue!.text()).not.toContain('未提取到')
+    // 其他标准要素仍要显式提示缺失，不能因为只有 deadline 有值就少行
+    expect(wrapper.findAll('.field__empty').length).toBeGreaterThanOrEqual(8)
+  })
+
+  it('行业政策按本类字段展示，不套用项目申报模板', async () => {
+    getArticle.mockResolvedValue(
+      detail({
+        category: 'industry_policy',
+        extractions: {
+          industry_policy: {
+            policy_name: {
+              value: '关于促进人工智能产业发展的若干措施',
+              raw_text: '关于促进人工智能产业发展的若干措施',
+              confidence: 0.9,
+              verified: true,
+            },
+            document_number: {
+              value: '沪科规〔2026〕1号',
+              raw_text: '沪科规〔2026〕1号',
+              confidence: 0.8,
+              verified: true,
+            },
+          },
+        },
+      }),
+    )
+    const wrapper = await mountView()
+    const text = wrapper.text()
+    expect(text).toContain('政策名称')
+    expect(text).toContain('文号')
+    expect(text).toContain('关于促进人工智能产业发展的若干措施')
+    expect(text).not.toContain('项目名称')
+  })
+
+  it('行业政策没有抽取结果时按本类标准字段铺空，不显示项目申报字段', async () => {
+    getArticle.mockResolvedValue(detail({ category: 'industry_policy', extractions: {} }))
+    const wrapper = await mountView()
+    expect(wrapper.findAll('.field__empty').length).toBeGreaterThanOrEqual(9)
+    expect(wrapper.text()).not.toContain('项目名称')
+  })
+
+  it('行业政策旧数据只有项目申报块时也不套用项目模板', async () => {
+    getArticle.mockResolvedValue(
+      detail({
+        category: 'industry_policy',
+        extractions: {
+          project_application: {
+            program_name: {
+              value: '旧项目名称',
+              raw_text: '旧项目名称',
+              confidence: 0.8,
+              verified: true,
+            },
+          },
+        },
+      }),
+    )
+    const wrapper = await mountView()
+    expect(wrapper.text()).not.toContain('项目名称')
+    expect(wrapper.text()).not.toContain('旧项目名称')
+    expect(wrapper.findAll('.field__empty').length).toBeGreaterThanOrEqual(9)
   })
 })
 

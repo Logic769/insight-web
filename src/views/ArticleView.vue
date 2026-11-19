@@ -50,6 +50,7 @@ const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
 
 /** 抽取字段的展示顺序与中文名；后端新增字段没登记时按 key 原样展示，不会丢信息 */
 const FIELD_LABELS: Record<string, string> = {
+  // 项目申报
   program_name: '项目名称',
   issuing_authority: '发布单位',
   eligible_applicants: '申报主体',
@@ -57,10 +58,103 @@ const FIELD_LABELS: Record<string, string> = {
   deadline: '截止日期',
   deadline_raw: '截止时间原文',
   funding_amount: '资助额度',
+  focus_areas: '重点领域',
   application_channel: '申报渠道',
   contact: '联系方式',
+  // 行业政策
+  policy_name: '政策名称',
+  document_number: '文号',
+  policy_type: '政策类型',
+  effective_date: '施行日期',
+  validity_period: '有效期',
+  applicable_scope: '适用范围',
+  key_measures: '主要举措',
+  target_industries: '涉及行业',
+  // 人才申报
+  talent_program_name: '人才计划/项目',
+  talent_targets: '人才类别/对象',
+  talent_eligibility: '申报条件',
+  benefits: '支持措施',
+  // 企业资质申报
+  certification_name: '资质名称',
+  certification_level: '资质等级/类别',
+  eligible_entities: '申报主体',
+  certification_conditions: '认定条件',
+  review_requirement: '复审要求',
+  // 资金补贴
+  subsidy_name: '补贴项目名称',
+  funding_type: '资金类型',
+  funding_standard: '补助标准',
+  subsidy_conditions: '申报条件',
 }
-const FIELD_ORDER = Object.keys(FIELD_LABELS)
+
+/** 每个大类自己的标准要素；没有抽取结果时按本类铺满，不拿项目申报模板顶替 */
+const CATEGORY_FIELD_ORDER: Record<string, string[]> = {
+  project_application: [
+    'program_name',
+    'issuing_authority',
+    'eligible_applicants',
+    'materials',
+    'deadline',
+    'deadline_raw',
+    'funding_amount',
+    'focus_areas',
+    'application_channel',
+    'contact',
+  ],
+  industry_policy: [
+    'policy_name',
+    'issuing_authority',
+    'document_number',
+    'policy_type',
+    'effective_date',
+    'validity_period',
+    'applicable_scope',
+    'key_measures',
+    'target_industries',
+  ],
+  talent_application: [
+    'talent_program_name',
+    'issuing_authority',
+    'talent_targets',
+    'talent_eligibility',
+    'benefits',
+    'funding_amount',
+    'deadline',
+    'deadline_raw',
+    'materials',
+    'application_channel',
+    'contact',
+  ],
+  enterprise_certification: [
+    'certification_name',
+    'issuing_authority',
+    'certification_level',
+    'eligible_entities',
+    'certification_conditions',
+    'materials',
+    'deadline',
+    'deadline_raw',
+    'validity_period',
+    'review_requirement',
+    'benefits',
+    'application_channel',
+  ],
+  funding_subsidy: [
+    'subsidy_name',
+    'issuing_authority',
+    'funding_type',
+    'funding_amount',
+    'funding_standard',
+    'eligible_entities',
+    'subsidy_conditions',
+    'deadline',
+    'deadline_raw',
+    'materials',
+    'application_channel',
+    'contact',
+  ],
+}
 
 const route = useRoute()
 const article = ref<ArticleDetail | null>(null)
@@ -142,30 +236,35 @@ function fieldValueOf(raw: unknown): string {
 }
 
 const fields = computed<FieldRow[]>(() => {
+  const category = article.value?.category ?? ''
   const extractions = article.value?.extractions ?? {}
-  const rows: FieldRow[] = []
-  const seen = new Set<string>()
-  for (const schema of Object.values(extractions)) {
-    for (const [key, field] of Object.entries(schema)) {
-      if (seen.has(key)) continue
-      seen.add(key)
-      rows.push({
-        key,
-        label: FIELD_LABELS[key] ?? key,
-        value: fieldValueOf(field.value),
-        verified: field.verified,
-        confidence: field.confidence,
-      })
-    }
+  // 大类决定 schema：优先取与文章 category 同名的抽取块；只有分类缺失的旧数据
+  // 才回退第一个块。分类明确但只有旧项目申报块时绝不套用项目模板。
+  const schemaKey = category
+    ? extractions[category]
+      ? category
+      : ''
+    : (Object.keys(extractions)[0] ?? '')
+  const schema = schemaKey ? extractions[schemaKey] : {}
+  const order = CATEGORY_FIELD_ORDER[category] ?? CATEGORY_FIELD_ORDER[schemaKey] ?? []
+  // 标准要素始终铺满；抽取结果缺失的字段显式显示「未提取到」，不能静默少行。
+  const keys: string[] = [...order]
+  for (const key of Object.keys(schema)) {
+    if (!keys.includes(key)) keys.push(key)
   }
-  if (rows.length === 0) {
-    for (const key of FIELD_ORDER) {
-      rows.push({ key, label: FIELD_LABELS[key], value: '', verified: false, confidence: 0 })
+  const rows: FieldRow[] = keys.map((key) => {
+    const field = schema[key]
+    return {
+      key,
+      label: FIELD_LABELS[key] ?? key,
+      value: field ? fieldValueOf(field.value) : '',
+      verified: field?.verified ?? false,
+      confidence: field?.confidence ?? 0,
     }
-  }
+  })
   const rank = (key: string): number => {
-    const index = FIELD_ORDER.indexOf(key)
-    return index < 0 ? FIELD_ORDER.length : index
+    const index = order.indexOf(key)
+    return index < 0 ? order.length : index
   }
   return rows.sort((a, b) => rank(a.key) - rank(b.key))
 })

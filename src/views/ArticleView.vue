@@ -25,6 +25,7 @@
  */
 import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { useNarrowViewport } from '@/composables/useNarrowViewport'
 import MarkdownIt from 'markdown-it'
 import { Star, StarFilled } from '@element-plus/icons-vue'
 import EmptyState from '@/components/EmptyState.vue'
@@ -157,6 +158,7 @@ const CATEGORY_FIELD_ORDER: Record<string, string[]> = {
 }
 
 const route = useRoute()
+const { isNarrow } = useNarrowViewport()
 const article = ref<ArticleDetail | null>(null)
 const checklist = ref<ArticleChecklist | null>(null)
 const tagDefs = ref<TagDef[]>([])
@@ -528,7 +530,7 @@ watch(
 
       <el-card v-if="fields.length" class="card" shadow="never">
         <template #header><span class="card__title">关键信息</span></template>
-        <el-descriptions class="fields" :column="2" border>
+        <el-descriptions class="fields" :column="isNarrow ? 1 : 2" border>
           <el-descriptions-item v-for="field in fields" :key="field.key" :label="field.label">
             <span
               class="field__value"
@@ -1269,5 +1271,50 @@ watch(
   gap: var(--space-2);
   padding: var(--space-3) var(--space-6) var(--space-4);
   border-top: 1px solid var(--color-split);
+}
+
+@media (max-width: 768px) {
+  .article {
+    padding: var(--space-3);
+  }
+
+  .head__title {
+    font-size: 20px;
+    line-height: 1.45;
+  }
+
+  .head__meta,
+  .head__actions {
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+
+  .fields :deep(.el-descriptions__label) {
+    width: 96px;
+    white-space: normal;
+  }
+
+  .related__list {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .article {
+    padding: var(--space-2);
+  }
+
+  .head__title {
+    font-size: 18px;
+  }
+
+  .fields :deep(.el-descriptions__label) {
+    width: 82px;
+    padding: 8px 10px;
+  }
+
+  .fields :deep(.el-descriptions__content) {
+    padding: 8px 10px;
+  }
 }
 </style>

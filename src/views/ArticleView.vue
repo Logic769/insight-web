@@ -222,6 +222,9 @@ interface FieldRow {
   label: string
   /** 空串表示这一项没抽到，界面标「未提取到」 */
   value: string
+  /** 关键信息只展示摘要，避免长段落把版面撑开；完整值放在 title 里 */
+  displayValue: string
+  truncated: boolean
   verified: boolean
   confidence: number
 }
@@ -233,6 +236,15 @@ function fieldValueOf(raw: unknown): string {
         .filter(Boolean)
         .join('；')
     : String(raw ?? '').trim()
+}
+
+/** 关键信息是摘要，不是正文：超过这个长度就截断，完整值保留在 title 中 */
+const FIELD_VALUE_MAX_CHARS = 120
+
+function compactFieldValue(raw: string): string {
+  const text = raw.replace(/\s+/g, ' ').trim()
+  if (text.length <= FIELD_VALUE_MAX_CHARS) return text
+  return `${text.slice(0, FIELD_VALUE_MAX_CHARS - 1).trimEnd()}…`
 }
 
 const fields = computed<FieldRow[]>(() => {
@@ -254,10 +266,14 @@ const fields = computed<FieldRow[]>(() => {
   }
   const rows: FieldRow[] = keys.map((key) => {
     const field = schema[key]
+    const value = field ? fieldValueOf(field.value) : ''
+    const displayValue = compactFieldValue(value)
     return {
       key,
       label: FIELD_LABELS[key] ?? key,
-      value: field ? fieldValueOf(field.value) : '',
+      value,
+      displayValue,
+      truncated: displayValue !== value,
       verified: field?.verified ?? false,
       confidence: field?.confidence ?? 0,
     }
@@ -514,9 +530,13 @@ watch(
         <template #header><span class="card__title">关键信息</span></template>
         <el-descriptions class="fields" :column="2" border>
           <el-descriptions-item v-for="field in fields" :key="field.key" :label="field.label">
-            <span class="field__value" :class="{ field__empty: !field.value }">
+            <span
+              class="field__value"
+              :class="{ field__empty: !field.value, field__truncated: field.truncated }"
+              :title="field.truncated ? field.value : undefined"
+            >
               <template v-if="field.value">
-                {{ field.value }}
+                {{ field.displayValue }}
                 <el-tag size="small" :type="field.verified ? 'success' : 'warning'" effect="light">
                   {{ field.verified ? '已核验' : '待核验' }}
                   {{ scoreToPercent(field.confidence) }}%
@@ -847,10 +867,31 @@ watch(
 }
 
 .fields {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: var(--space-3);
+  display: block;
+  width: 100%;
   margin: 0;
+}
+
+/* el-descriptions 内部是 table；让表格占满卡片宽度，label 固定不换行，
+   关键信息与正文共用同一条内容栏，而不是被 grid 压成窄列。 */
+.fields :deep(.el-descriptions__table) {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.fields :deep(.el-descriptions__label) {
+  width: 110px;
+  white-space: nowrap;
+  vertical-align: top;
+}
+
+.fields :deep(.el-descriptions__content) {
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.fields :deep(.el-descriptions__cell) {
+  padding: 10px 14px;
 }
 
 .field {

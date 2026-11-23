@@ -358,4 +358,15 @@ describe('输入法键盘行为', () => {
     expect(vi.mocked(searchArticles)).toHaveBeenCalled()
     expect(vi.mocked(searchArticles).mock.calls[0]![0]).toBe('项目申报')
   })
+
+  it('无建议时表单提交仍可检索（覆盖普通 Enter 的隐式提交路径）', async () => {
+    vi.mocked(searchArticles).mockResolvedValue(makePayload([]))
+    const { wrapper } = await mountAt('/search')
+    const input = wrapper.find('#search-input')
+    await input.setValue('项目')
+    await wrapper.find('form.searchbox').trigger('submit')
+    await settle()
+    expect(vi.mocked(searchArticles)).toHaveBeenCalled()
+    expect(vi.mocked(searchArticles).mock.calls[0]![0]).toBe('项目')
+  })
 })

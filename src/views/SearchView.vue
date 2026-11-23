@@ -36,6 +36,7 @@ import { listTags, tagName, type TagDef } from '@/api/tags'
 import { readJson, writeJson } from '@/utils/storage'
 import { STORAGE_KEYS } from '@/utils/storageKeys'
 import { isRangeInverted, isYmd, resolveRange, type TimeRange } from '@/utils/dateRange'
+import { isImeConfirming } from '@/utils/ime'
 import {
   HIGH_RELEVANCE_FILTER_SCORE,
   highRelevanceSummary,
@@ -339,6 +340,12 @@ function pickSuggestion(word: string): void {
 
 /** ↑/↓ 在建议间移动，Enter 选中，Esc 关闭（规范要求键盘可达） */
 function onInputKeydown(event: KeyboardEvent): void {
+  // 输入法组合期间的 ↑/↓/Enter 属于候选词操作，不能拿来做建议导航或提交。
+  // Enter 仍要 preventDefault，否则会触发表单的隐式提交。
+  if (isImeConfirming(event)) {
+    if (event.key === 'Enter') event.preventDefault()
+    return
+  }
   const list = suggestions.value
   if (!list.length) return
   if (event.key === 'ArrowDown') {

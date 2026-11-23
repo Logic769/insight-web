@@ -323,3 +323,39 @@ describe('清除与筛选状态（S16 / S17 回归）', () => {
     expect(wrapper.find('.pager__summary').text()).toContain('第 1 / 1 页')
   })
 })
+
+describe('输入法键盘行为', () => {
+  it('候选词中的 Enter 不选中建议，普通 Enter 才选中', async () => {
+    const { wrapper } = await mountAt('/search')
+    const input = wrapper.find('#search-input')
+    const native = input.element as HTMLInputElement
+    await input.setValue('项目')
+    await input.trigger('focus')
+    await settle()
+
+    native.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }),
+    )
+    await settle()
+    expect(wrapper.find('.suggest__item--active').exists()).toBe(true)
+
+    const imeEnter = new KeyboardEvent('keydown', {
+      key: 'Enter',
+      isComposing: true,
+      bubbles: true,
+      cancelable: true,
+    })
+    native.dispatchEvent(imeEnter)
+    await settle()
+    expect(imeEnter.defaultPrevented).toBe(true)
+    expect(vi.mocked(searchArticles)).not.toHaveBeenCalled()
+    expect(native.value).toBe('项目')
+
+    native.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+    )
+    await settle()
+    expect(vi.mocked(searchArticles)).toHaveBeenCalled()
+    expect(vi.mocked(searchArticles).mock.calls[0]![0]).toBe('项目申报')
+  })
+})

@@ -44,6 +44,7 @@ onBeforeUnmount(() => {
   <el-config-provider :locale="zhCn">
     <div class="app">
       <div v-if="pending > 0" class="app__progress" role="progressbar" aria-label="加载中" />
+      <a v-if="showNav" class="skip-link" href="#main-content">跳到主要内容</a>
       <AppNav v-if="showNav">
         <RouterView v-slot="{ Component }">
           <Transition name="fade" mode="out-in">
@@ -52,7 +53,7 @@ onBeforeUnmount(() => {
         </RouterView>
       </AppNav>
 
-      <main v-else class="app__main">
+      <main v-else id="main-content" class="app__main" tabindex="-1">
         <RouterView v-slot="{ Component }">
           <Transition name="fade" mode="out-in">
             <component :is="Component" />

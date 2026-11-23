@@ -359,6 +359,25 @@ describe('输入法键盘行为', () => {
     expect(vi.mocked(searchArticles).mock.calls[0]![0]).toBe('项目申报')
   })
 
+  it('keyCode 229 的 ArrowDown 仍可导航建议（不被当作输入法确认）', async () => {
+    const { wrapper } = await mountAt('/search')
+    const input = wrapper.find('#search-input')
+    const native = input.element as HTMLInputElement
+    await input.setValue('项目')
+    await input.trigger('focus')
+    await settle()
+
+    const down = new KeyboardEvent('keydown', {
+      key: 'ArrowDown',
+      bubbles: true,
+      cancelable: true,
+    })
+    Object.defineProperty(down, 'keyCode', { value: 229 })
+    native.dispatchEvent(down)
+    await settle()
+    expect(wrapper.find('.suggest__item--active').exists()).toBe(true)
+  })
+
   it('无建议时表单提交仍可检索（覆盖普通 Enter 的隐式提交路径）', async () => {
     vi.mocked(searchArticles).mockResolvedValue(makePayload([]))
     const { wrapper } = await mountAt('/search')

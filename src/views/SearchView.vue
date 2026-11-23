@@ -342,10 +342,13 @@ function pickSuggestion(word: string): void {
 function onInputKeydown(event: KeyboardEvent): void {
   // 输入法组合期间的 ↑/↓/Enter 属于候选词操作，不能拿来做建议导航或提交。
   // Enter 仍要 preventDefault，否则会触发表单的隐式提交。
-  if (isImeConfirming(event)) {
-    if (event.key === 'Enter') event.preventDefault()
+  // keyCode 229 只在 Enter 上当作输入法确认：部分移动端虚拟键盘对方向键
+  // 也会给 229，若一律拦截，建议列表的方向键导航会被误吞。
+  if (event.key === 'Enter' && isImeConfirming(event)) {
+    event.preventDefault()
     return
   }
+  if (event.isComposing) return
   const list = suggestions.value
   if (!list.length) return
   if (event.key === 'ArrowDown') {
